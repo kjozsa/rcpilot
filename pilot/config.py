@@ -26,8 +26,9 @@ class Config:
     # Prefix prepended to every tmux session name to avoid collisions
     tmux_session_prefix: str = "pilot-"
     # Passed as --spawn=<value> to claude remote-control; skips the interactive
-    # first-run prompt. Options: "same-dir" | "worktree"
-    spawn_mode: str = "same-dir"
+    # first-run prompt. Options: "session" | "same-dir" | "worktree"
+    # "session" produces a /session_xxx URL that the Claude mobile app handles correctly.
+    spawn_mode: str = "session"
     # SQLite database file path
     db_path: Path = field(default_factory=lambda: Path.home() / ".config" / "pi-lot" / "pilot.db")
 

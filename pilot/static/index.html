@@ -114,6 +114,19 @@
     }
     .rc-url-row a { color: var(--accent); text-decoration: none; }
     .rc-url-row a:hover { text-decoration: underline; }
+    .btn-copy {
+      font-size: .75rem;
+      padding: .2rem .6rem;
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      border-radius: 6px;
+      margin-left: .4rem;
+      vertical-align: middle;
+      font-weight: normal;
+    }
+    .btn-copy:hover { border-color: var(--accent); color: var(--text); opacity: 1; }
+    .btn-copy.copied { border-color: var(--green); color: var(--green); }
 
     /* ── Action buttons ──────────────────────────────────────────────── */
     .action-row {
@@ -423,7 +436,8 @@
     badge.className = `status-badge status-${status}`;
 
     if (data.rc_url) {
-      urlRow.innerHTML = `RC: <a href="${escHtml(data.rc_url)}" target="_blank" rel="noopener">${escHtml(data.rc_url)}</a>`;
+      urlRow.innerHTML = `RC: <a href="${escHtml(data.rc_url)}" target="_blank" rel="noopener">${escHtml(data.rc_url)}</a>`
+        + `<button class="btn-copy" onclick="copyUrl(this,'${escHtml(data.rc_url)}')">Copy</button>`;
     } else {
       urlRow.innerHTML = '';
     }
@@ -471,6 +485,14 @@
     const banner = document.getElementById('error-banner');
     if (msg) { banner.textContent = msg; banner.style.display = 'block'; }
     else { banner.style.display = 'none'; }
+  }
+
+  function copyUrl(btn, url) {
+    navigator.clipboard.writeText(url).then(() => {
+      btn.textContent = 'Copied!';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+    });
   }
 
   function escHtml(str) {

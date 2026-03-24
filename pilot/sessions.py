@@ -18,11 +18,13 @@ from loguru import logger
 
 import pilot.db as db
 
-# Matches the RC URL that `claude remote-control` prints, e.g.:
-#   Continue coding in the Claude app or https://claude.ai/code?bridge=env_01Abc...
+# Matches the RC session URL that `claude remote-control` prints.
+# Known formats (both observed in the wild):
+#   https://claude.ai/code/session_01VG9LMVdzoPXv6FLKEk4Mwf   (session path)
+#   https://claude.ai/code?bridge=env_01Abc...                 (bridge query param)
 # The token may wrap across lines at the terminal width, so we join lines
 # before matching (see _extract_rc_url).
-_RC_URL_PATTERN = re.compile(r"https://claude\.ai/code\?bridge=[A-Za-z0-9_=-]+")
+_RC_URL_PATTERN = re.compile(r"https://claude\.ai/code[/\?][A-Za-z0-9_=?&-]+")
 
 SessionStatus = Literal["running", "stopped", "timed_out"]
 
