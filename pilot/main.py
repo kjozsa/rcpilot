@@ -10,6 +10,10 @@ Routes (all sync — FastAPI runs them in a thread pool):
   GET    /api/sessions/{project}/history    → list past sessions for project
   POST   /api/sessions/{project}/resume     → re-launch a stopped session (Phase 2: +context)
   GET    /api/logs?since=<cursor>           → recent log lines for browser console forwarding
+  GET    /api/sessions/{project}/history/{session_id}/snapshot → pane snapshot
+  PATCH  /api/sessions/{project}/history/{session_id}          → rename session
+  DELETE /api/sessions/{project}/history                       → clear non-running sessions
+  POST   /api/sessions/{project}/send                         → send keys to active tmux session
 """
 
 from __future__ import annotations
@@ -18,7 +22,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import uvicorn
-from fastapi import FastAPI, HTTPException
+from fastapi import Body, FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from loguru import logger
@@ -155,6 +159,55 @@ def get_history(project: str) -> list[dict]:
     """Return all past session records for *project*, newest first."""
     _get_project_path(project)  # 404 if unknown project
     return pilot_db.list_sessions(str(_config.db_path), project)
+
+
+@app.delete("/api/sessions/{project}/history")
+def clear_history(project: str) -> dict:
+    """Delete all non-running sessions (and their logs) for *project*."""
+    _get_project_path(project)  # 404 if unknown project
+    deleted = pilot_db.clear_history(str(_config.db_path), project)
+    return {"deleted": deleted}
+
+
+@app.get("/api/sessions/{project}/history/{session_id}/snapshot")
+def get_session_snapshot(project: str, session_id: int) -> dict:
+    """Return the pane snapshot for a specific session."""
+    _get_project_path(project)  # 404 if unknown project
+    content = pilot_db.get_session_snapshot(str(_config.db_path), session_id)
+    return {"content": content}
+
+
+@app.patch("/api/sessions/{project}/history/{session_id}")
+def rename_session(
+    project: str,
+    session_id: int,
+    name: str = Body(..., embed=True),
+) -> dict:
+    """Rename a session."""
+    _get_project_path(project)  # 404 if unknown project
+    name = name.strip()
+    if not name:
+        raise HTTPException(status_code=422, detail="name must not be empty")
+    updated = pilot_db.rename_session(str(_config.db_path), session_id, name)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {"ok": True}
+
+
+@app.post("/api/sessions/{project}/send")
+def send_to_session(
+    project: str,
+    text: str = Body(..., embed=True),
+) -> dict:
+    """Send text to the active RC session via tmux send-keys."""
+    _get_project_path(project)  # 404 if unknown project
+    text = text.strip()
+    if not text:
+        raise HTTPException(status_code=422, detail="text must not be empty")
+    sent = session_mgr.send_keys(project, _config.tmux_session_prefix, text)
+    if not sent:
+        raise HTTPException(status_code=409, detail="No active session for this project")
+    return {"ok": True}
 
 
 @app.post("/api/sessions/{project}/resume")

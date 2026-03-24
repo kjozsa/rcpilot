@@ -134,7 +134,53 @@ def list_sessions(db_path: str, project: str) -> list[dict[str, Any]]:
     """Return all session rows for *project*, newest first."""
     with _connect(db_path) as conn:
         rows = conn.execute(
-            "SELECT * FROM sessions WHERE project = ? ORDER BY started_at DESC",
+            "SELECT s.*, "
+            "(SELECT COUNT(*) FROM session_logs sl "
+            " WHERE sl.session_id = s.id AND sl.role = 'snapshot') AS has_snapshot "
+            "FROM sessions s WHERE s.project = ? ORDER BY s.started_at DESC",
             (project,),
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+def get_session_snapshot(db_path: str, session_id: int) -> str | None:
+    """Return the pane snapshot content for a session, or None."""
+    with _connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT content FROM session_logs "
+            "WHERE session_id = ? AND role = 'snapshot' LIMIT 1",
+            (session_id,),
+        ).fetchone()
+    return row["content"] if row else None
+
+
+def rename_session(db_path: str, session_id: int, name: str) -> bool:
+    """Update the name of a session. Returns True if a row was updated."""
+    with _connect(db_path) as conn:
+        cur = conn.execute(
+            "UPDATE sessions SET name = ? WHERE id = ?",
+            (name, session_id),
+        )
+        conn.commit()
+    return cur.rowcount > 0
+
+
+def clear_history(db_path: str, project: str) -> int:
+    """Delete all non-running sessions (and their logs) for *project*.
+
+    Returns the number of sessions deleted.
+    """
+    with _connect(db_path) as conn:
+        ids = [
+            row[0]
+            for row in conn.execute(
+                "SELECT id FROM sessions WHERE project = ? AND status != 'running'",
+                (project,),
+            ).fetchall()
+        ]
+        if ids:
+            placeholders = ",".join("?" * len(ids))
+            conn.execute(f"DELETE FROM session_logs WHERE session_id IN ({placeholders})", ids)
+            conn.execute(f"DELETE FROM sessions WHERE id IN ({placeholders})", ids)
+            conn.commit()
+    return len(ids)

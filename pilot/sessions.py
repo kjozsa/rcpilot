@@ -130,6 +130,22 @@ def get_session_status(project: str, prefix: str, db_path: str) -> dict[str, Any
     return {"status": "running", "rc_url": url, "session_id": sid}
 
 
+def send_keys(project: str, prefix: str, text: str) -> bool:
+    """Send *text* to the active tmux session as if the user typed it.
+
+    Returns True if the session exists and keys were sent, False otherwise.
+    """
+    session_name = _tmux_session_name(prefix, project)
+    if not _session_exists(session_name):
+        return False
+    subprocess.run(
+        ["tmux", "send-keys", "-t", session_name, text, "Enter"],
+        check=True,
+    )
+    logger.info("send_keys: project={} text={!r}", project, text[:80])
+    return True
+
+
 def kill_session(project: str, prefix: str, db_path: str) -> dict[str, Any]:
     """
     Kill the tmux session for *project*.

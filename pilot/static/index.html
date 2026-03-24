@@ -161,6 +161,25 @@
     }
     .history-toggle:hover { color: var(--text); opacity: 1; }
 
+    .history-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: .75rem;
+    }
+
+    .btn-clear-history {
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: .75rem;
+      cursor: pointer;
+      padding: 0;
+      font-weight: normal;
+      display: none;
+    }
+    .btn-clear-history:hover { color: var(--red); opacity: 1; }
+
     .session-history {
       margin-top: .5rem;
       border-top: 1px solid var(--border);
@@ -267,6 +286,104 @@
     .git-diff-stat { cursor: pointer; }
     .git-diff-stat:hover { color: var(--text); }
     .git-synced { font-size: .75rem; color: var(--green); margin-top: .3rem; opacity: .6; }
+
+    /* ── Rename & log buttons in history table ───────────────────────── */
+    .btn-rename {
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: .75rem;
+      padding: 0 .2rem;
+      cursor: pointer;
+      opacity: 0;
+      transition: opacity .15s;
+      vertical-align: middle;
+    }
+    tr:hover .btn-rename { opacity: 1; }
+    .btn-rename:hover { color: var(--accent); opacity: 1 !important; }
+
+    .btn-log {
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: .7rem;
+      padding: 0 .2rem;
+      cursor: pointer;
+      opacity: 0;
+      transition: opacity .15s;
+      vertical-align: middle;
+    }
+    tr:hover .btn-log { opacity: 1; }
+    .btn-log:hover { color: var(--accent); opacity: 1 !important; }
+
+    .name-input {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--accent);
+      border-radius: 4px;
+      padding: .1rem .3rem;
+      font-size: .8rem;
+      width: 100%;
+      min-width: 60px;
+    }
+
+    /* ── Snapshot modal ──────────────────────────────────────────────── */
+    #snapshot-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.6);
+      z-index: 100;
+      align-items: flex-end;
+    }
+    #snapshot-overlay.open { display: flex; }
+
+    #snapshot-sheet {
+      background: var(--surface2);
+      border-top: 1px solid var(--border);
+      border-radius: var(--radius) var(--radius) 0 0;
+      width: 100%;
+      max-height: 85vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    #snapshot-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: .6rem 1rem;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    #snapshot-title { font-size: .9rem; font-weight: 600; color: var(--text); }
+    #snapshot-close {
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 1.3rem;
+      line-height: 1;
+      padding: .2rem .5rem;
+      cursor: pointer;
+    }
+    #snapshot-close:hover { color: var(--text); opacity: 1; }
+
+    #snapshot-body {
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: .75rem 1rem;
+      flex: 1;
+    }
+
+    #snapshot-body pre {
+      font-family: ui-monospace, monospace;
+      font-size: .75rem;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-all;
+      margin: 0;
+      color: var(--text);
+    }
   </style>
 </head>
 <body>
@@ -286,6 +403,15 @@
       <button id="diff-close" onclick="closeDiff()">✕</button>
     </div>
     <div id="diff-body"><pre id="diff-pre"></pre></div>
+  </div>
+</div>
+<div id="snapshot-overlay" onclick="closeSnapshot(event)">
+  <div id="snapshot-sheet">
+    <div id="snapshot-header">
+      <span id="snapshot-title">session log</span>
+      <button id="snapshot-close" onclick="closeSnapshot()">✕</button>
+    </div>
+    <div id="snapshot-body"><pre id="snapshot-pre"></pre></div>
   </div>
 </div>
 <div id="empty-state">No projects found.<br>Check your <code>projects_dir</code> in config.</div>
@@ -350,10 +476,16 @@
         <button class="btn-kill"    onclick="killSession('${project.name}')"    id="btn-kill-${project.name}" disabled>Kill</button>
         ${project.has_git ? `<button class="btn-pull" onclick="gitPull(this,'${project.name}')" id="btn-pull-${project.name}">↓ Pull</button>` : ''}
       </div>
-      <button class="history-toggle" id="hist-toggle-${project.name}"
-              onclick="toggleHistory('${project.name}')" style="display:none">
-        ▸ History
-      </button>
+      <div class="history-header">
+        <button class="history-toggle" id="hist-toggle-${project.name}"
+                onclick="toggleHistory('${project.name}')" style="display:none">
+          ▸ History
+        </button>
+        <button class="btn-clear-history" id="hist-clear-${project.name}"
+                onclick="clearHistory('${project.name}')">
+          Clear
+        </button>
+      </div>
       <div class="session-history" id="history-${project.name}"></div>
     `;
     return card;
@@ -418,23 +550,32 @@
     const container = document.getElementById(`history-${name}`);
     if (!toggle || !container) return;
 
+    const clearBtn = document.getElementById(`hist-clear-${name}`);
+
     if (records.length === 0) {
       toggle.style.display = 'none';
+      if (clearBtn) clearBtn.style.display = 'none';
       container.innerHTML = '';
       return;
     }
 
     toggle.style.display = 'block';
+    if (clearBtn) clearBtn.style.display = records.some(r => r.status !== 'running') ? 'block' : 'none';
     toggle.textContent = (container.classList.contains('open') ? '▾' : '▸') + ` History (${records.length})`;
 
-    // Show at most 5 rows; remaining accessible via "show all" toggle
     const shown = records.slice(0, 5);
     const rows = shown.map(r => `
       <tr>
-        <td>${escHtml(r.name || r.started_at.slice(0,10))}</td>
+        <td class="name-cell" data-session-id="${r.id}" data-project="${escHtml(name)}">
+          <span class="name-text">${escHtml(r.name || r.started_at.slice(0,10))}</span>
+          <button class="btn-rename" data-session-id="${r.id}" data-project="${escHtml(name)}" data-name="${escHtml(r.name || r.started_at.slice(0,10))}" title="Rename">✎</button>
+        </td>
         <td>${escHtml(r.started_at.slice(11,16))} UTC</td>
         <td>${r.ended_at ? escHtml(r.ended_at.slice(11,16)) + ' UTC' : '—'}</td>
-        <td><span class="status-badge status-${r.status}" style="font-size:.7rem;padding:.1rem .5rem">${escHtml(r.status)}</span></td>
+        <td>
+          <span class="status-badge status-${r.status}" style="font-size:.7rem;padding:.1rem .5rem">${escHtml(r.status)}</span>
+          ${r.has_snapshot ? `<button class="btn-log" data-session-id="${r.id}" data-project="${escHtml(name)}" data-label="${escHtml(r.name || r.started_at.slice(0,10))}" title="View session log">≡</button>` : ''}
+        </td>
       </tr>
     `).join('');
 
@@ -444,13 +585,86 @@
 
     container.innerHTML = `
       <table class="history-table">
-        <thead><tr><th>Date</th><th>Started</th><th>Ended</th><th>Status</th></tr></thead>
+        <thead><tr><th>Name</th><th>Started</th><th>Ended</th><th>Status</th></tr></thead>
         <tbody>${rows}${moreRow}</tbody>
       </table>
     `;
 
-    // Show Resume button if not currently running and there's history
+    container.querySelectorAll('.btn-rename').forEach(btn => {
+      btn.addEventListener('click', () => startRename(btn.dataset.project, +btn.dataset.sessionId, btn.dataset.name));
+    });
+    container.querySelectorAll('.btn-log').forEach(btn => {
+      btn.addEventListener('click', () => showSnapshot(btn.dataset.project, +btn.dataset.sessionId, btn.dataset.label));
+    });
+
     updateResumeButton(name);
+  }
+
+  function startRename(projectName, sessionId, currentName) {
+    const cell = document.querySelector(`.name-cell[data-session-id="${sessionId}"]`);
+    if (!cell) return;
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = currentName;
+    input.className = 'name-input';
+    cell.innerHTML = '';
+    cell.appendChild(input);
+    input.focus();
+    input.select();
+
+    let saved = false;
+    const save = async () => {
+      if (saved) return;
+      saved = true;
+      const newName = input.value.trim();
+      if (newName && newName !== currentName) {
+        try {
+          const res = await fetch(
+            `/api/sessions/${encodeURIComponent(projectName)}/history/${sessionId}`,
+            {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ name: newName }),
+            }
+          );
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        } catch (err) {
+          showError('Rename failed: ' + err.message);
+        }
+      }
+      await loadHistory(projectName);
+    };
+
+    input.addEventListener('blur', save);
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); save(); }
+      if (e.key === 'Escape') { saved = true; loadHistory(projectName); }
+    });
+  }
+
+  async function showSnapshot(projectName, sessionId, label) {
+    document.getElementById('snapshot-title').textContent = `session log — ${label}`;
+    const pre = document.getElementById('snapshot-pre');
+    pre.textContent = 'Loading…';
+    document.getElementById('snapshot-overlay').classList.add('open');
+    document.body.style.overflow = 'hidden';
+    try {
+      const res = await fetch(
+        `/api/sessions/${encodeURIComponent(projectName)}/history/${sessionId}/snapshot`
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const { content } = await res.json();
+      pre.textContent = content || '(no snapshot recorded)';
+    } catch (err) {
+      pre.textContent = `Error: ${err.message}`;
+    }
+  }
+
+  function closeSnapshot(e) {
+    if (e && e.target !== document.getElementById('snapshot-overlay')) return;
+    document.getElementById('snapshot-overlay').classList.remove('open');
+    document.body.style.overflow = '';
   }
 
   function toggleHistory(name) {
@@ -463,6 +677,17 @@
   }
 
   function updateResumeButton(_name) { /* no-op: Connect handles start+resume */ }
+
+  async function clearHistory(name) {
+    if (!confirm(`Clear all stopped sessions for "${name}"?`)) return;
+    try {
+      const res = await fetch(`/api/sessions/${encodeURIComponent(name)}/history`, { method: 'DELETE' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      await loadHistory(name);
+    } catch (err) {
+      showError('Clear failed: ' + err.message);
+    }
+  }
 
   // ── UI helpers ─────────────────────────────────────────────────────────
   function applyState(name, data) {
@@ -559,7 +784,7 @@
   }
 
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') closeDiff();
+    if (e.key === 'Escape') { closeDiff(); closeSnapshot(); }
   });
 
   function colorDiff(text) {
