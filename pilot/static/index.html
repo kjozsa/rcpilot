@@ -199,7 +199,7 @@
 <body>
 
 <header>
-  <h1>pi<span>-</span>lot</h1>
+  <h1>pi<span>-</span>lot <small id="version" style="font-size:.7rem;color:var(--muted);font-weight:400"></small></h1>
   <button id="refresh-btn" onclick="loadProjects()">↺ Refresh</button>
 </header>
 
@@ -213,7 +213,12 @@
   const historyCache = {};   // project name → array of session records
 
   // ── Bootstrap ──────────────────────────────────────────────────────────
-  document.addEventListener('DOMContentLoaded', loadProjects);
+  document.addEventListener('DOMContentLoaded', () => {
+    loadProjects();
+    fetch('/api/info').then(r => r.json()).then(d => {
+      document.getElementById('version').textContent = 'v' + d.version;
+    });
+  });
 
   async function loadProjects() {
     showError(null);
@@ -444,7 +449,6 @@
       reconnectBtn.remove();
     }
 
-    setBusy(name, false);
     updateResumeButton(name);
   }
 

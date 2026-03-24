@@ -61,6 +61,7 @@ def start_session(
     project_path: str,
     prefix: str,
     db_path: str,
+    spawn_mode: str = "same-dir",
 ) -> dict[str, Any]:
     """
     Spawn ``claude remote-control`` for *project* inside a new (or reused)
@@ -86,7 +87,7 @@ def start_session(
             "-d",               # detached
             "-s", session_name,
             "-c", project_path, # starting directory
-            "claude remote-control",
+            f"claude remote-control --spawn={spawn_mode}",
         ],
         check=True,
     )

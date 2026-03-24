@@ -23,6 +23,8 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from loguru import logger
 
+from importlib.metadata import version as pkg_version
+
 from pilot.config import Config, load_config
 from pilot.projects import list_projects
 from pilot import db as pilot_db
@@ -72,6 +74,11 @@ def serve_index() -> FileResponse:
 # Projects
 # ---------------------------------------------------------------------------
 
+@app.get("/api/info")
+def get_info() -> dict:
+    return {"version": pkg_version("pi-lot")}
+
+
 @app.get("/api/projects")
 def get_projects() -> list[dict]:
     return list_projects(_config.projects_dir)  # type: ignore[return-value]
@@ -97,7 +104,18 @@ def start_session(project: str) -> dict:
         project_path=path,
         prefix=_config.tmux_session_prefix,
         db_path=str(_config.db_path),
+        spawn_mode=_config.spawn_mode,
     )
+
+
+@app.get("/api/sessions/{project}/pane")
+def get_pane(project: str) -> dict:
+    """Return raw tmux pane output — useful for diagnosing startup failures."""
+    from pilot.sessions import _tmux_session_name, _capture_pane, _session_exists
+    session_name = _tmux_session_name(_config.tmux_session_prefix, project)
+    if not _session_exists(session_name):
+        return {"exists": False, "output": None}
+    return {"exists": True, "output": _capture_pane(session_name)}
 
 
 @app.get("/api/sessions/{project}/history")
@@ -121,6 +139,7 @@ def resume_session(project: str) -> dict:
         project_path=path,
         prefix=_config.tmux_session_prefix,
         db_path=str(_config.db_path),
+        spawn_mode=_config.spawn_mode,
     )
 
 

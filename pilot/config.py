@@ -25,6 +25,9 @@ class Config:
     port: int = 8000
     # Prefix prepended to every tmux session name to avoid collisions
     tmux_session_prefix: str = "pilot-"
+    # Passed as --spawn=<value> to claude remote-control; skips the interactive
+    # first-run prompt. Options: "same-dir" | "worktree"
+    spawn_mode: str = "same-dir"
     # SQLite database file path
     db_path: Path = field(default_factory=lambda: Path.home() / ".config" / "pi-lot" / "pilot.db")
 
@@ -55,6 +58,8 @@ def load_config(path: Path | None = None) -> Config:
         kwargs["port"] = int(raw["port"])
     if "tmux_session_prefix" in raw:
         kwargs["tmux_session_prefix"] = str(raw["tmux_session_prefix"])
+    if "spawn_mode" in raw:
+        kwargs["spawn_mode"] = str(raw["spawn_mode"])
     if "db_path" in raw:
         kwargs["db_path"] = Path(raw["db_path"]).expanduser()
 
