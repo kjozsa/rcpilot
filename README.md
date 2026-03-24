@@ -1,8 +1,8 @@
-# pi-lot
+# claude-pilot
 
-> **Claude Code RC is powerful but ephemeral. pi-lot gives it a home.**
+> **Claude Code RC is powerful but ephemeral. claude-pilot gives it a home.**
 
-pi-lot is a lightweight, self-hosted session manager for
+claude-pilot is a lightweight, self-hosted session manager for
 [Claude Code Remote Control](https://docs.anthropic.com/en/docs/claude-code).
 Run it on a Raspberry Pi (or any always-on machine) and get a mobile-friendly
 web UI to launch, reconnect to, and eventually persist your coding sessions.
@@ -13,10 +13,10 @@ web UI to launch, reconnect to, and eventually persist your coding sessions.
 
 ```bash
 # One-liner — no install required
-uvx pi-lot
+uvx claude-pilot
 
 # Or install permanently
-uv tool install pi-lot
+uv tool install claude-pilot
 pilot          # then just run this
 ```
 
@@ -27,7 +27,7 @@ Open that address in any browser on your local network (or VPN).
 
 ## Configuration
 
-Create `~/.config/pi-lot/config.toml` (or point `PILOT_CONFIG` at any path):
+Create `~/.config/claude-pilot/config.toml` (or point `PILOT_CONFIG` at any path):
 
 ```toml
 # Directory scanned for projects — one subdirectory = one project
@@ -53,17 +53,17 @@ All fields are optional — the defaults above apply when the file is absent.
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-### 2. Install pi-lot
+### 2. Install claude-pilot
 
 ```bash
-uv tool install pi-lot
+uv tool install claude-pilot
 ```
 
 ### 3. Create your config
 
 ```bash
-mkdir -p ~/.config/pi-lot
-cat > ~/.config/pi-lot/config.toml <<'EOF'
+mkdir -p ~/.config/claude-pilot
+cat > ~/.config/claude-pilot/config.toml <<'EOF'
 projects_dir = "~/projects"
 host = "0.0.0.0"
 port = 8000
@@ -73,9 +73,9 @@ EOF
 ### 4. Run as a systemd service (optional but recommended)
 
 ```ini
-# /etc/systemd/system/pi-lot.service
+# /etc/systemd/system/claude-pilot.service
 [Unit]
-Description=pi-lot session manager
+Description=claude-pilot session manager
 After=network.target
 
 [Service]
@@ -88,19 +88,19 @@ WantedBy=multi-user.target
 ```
 
 ```bash
-sudo systemctl enable --now pi-lot
+sudo systemctl enable --now claude-pilot
 ```
 
 ---
 
 ## VPN access
 
-pi-lot has no authentication in v0 — it's designed to be accessed over a
+claude-pilot has no authentication in v0 — it's designed to be accessed over a
 trusted private network (e.g. Tailscale or WireGuard).
 
 **Recommended setup:**
 1. Install [Tailscale](https://tailscale.com) on your Pi and your phone/laptop.
-2. Access pi-lot at `http://<pi-tailscale-ip>:8000` from anywhere.
+2. Access claude-pilot at `http://<pi-tailscale-ip>:8000` from anywhere.
 3. iOS Safari works fine — the UI is mobile-first with large tap targets.
 
 Do **not** expose port 8000 directly to the public internet without adding
@@ -120,7 +120,7 @@ authentication (planned for Phase 3).
 
 ```bash
 git clone <repo>
-cd pi-lot
+cd claude-pilot
 uv sync --extra dev
 uv run pytest
 uv run pilot          # starts server with live reload

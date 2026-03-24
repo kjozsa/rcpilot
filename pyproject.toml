@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "pi-lot"
+name = "claude-pilot"
 version = "0.1.0"
 description = "Lightweight self-hosted session manager for Claude Code Remote Control"
 readme = "README.md"
@@ -20,7 +20,7 @@ dependencies = [
 ]
 
 [project.scripts]
-# `uvx pi-lot` or `uv tool install pi-lot` → runs this entry point
+# `uvx claude-pilot` or `uv tool install claude-pilot` → runs this entry point
 pilot = "pilot.main:run"
 
 [project.optional-dependencies]

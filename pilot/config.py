@@ -1,7 +1,7 @@
 """
-Config loading for pi-lot.
+Config loading for claude-pilot.
 
-Reads from ~/.config/pi-lot/config.toml by default, or from the path
+Reads from ~/.config/claude-pilot/config.toml by default, or from the path
 specified by the PILOT_CONFIG environment variable.
 """
 
@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 
-DEFAULT_CONFIG_PATH = Path.home() / ".config" / "pi-lot" / "config.toml"
+DEFAULT_CONFIG_PATH = Path.home() / ".config" / "claude-pilot" / "config.toml"
 
 
 @dataclass
@@ -30,7 +30,7 @@ class Config:
     # "session" produces a /session_xxx URL that the Claude mobile app handles correctly.
     spawn_mode: str = "session"
     # SQLite database file path
-    db_path: Path = field(default_factory=lambda: Path.home() / ".config" / "pi-lot" / "pilot.db")
+    db_path: Path = field(default_factory=lambda: Path.home() / ".config" / "claude-pilot" / "pilot.db")
 
 
 def load_config(path: Path | None = None) -> Config:

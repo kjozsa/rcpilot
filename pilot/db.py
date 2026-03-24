@@ -1,5 +1,5 @@
 """
-SQLite persistence for pi-lot.
+SQLite persistence for claude-pilot.
 
 Two layers:
   - async init_db()       — runs once at startup via FastAPI lifespan (aiosqlite)
