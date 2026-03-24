@@ -92,6 +92,12 @@
       padding: .1rem .4rem;
     }
 
+    .git-diff-stat {
+      font-size: .75rem;
+      color: var(--yellow);
+      margin-top: .3rem;
+    }
+
     /* ── Status badge ────────────────────────────────────────────────── */
     .status-badge {
       font-size: .78rem;
@@ -114,20 +120,6 @@
     }
     .rc-url-row a { color: var(--accent); text-decoration: none; }
     .rc-url-row a:hover { text-decoration: underline; }
-    .btn-copy {
-      font-size: .75rem;
-      padding: .2rem .6rem;
-      background: none;
-      border: 1px solid var(--border);
-      color: var(--muted);
-      border-radius: 6px;
-      margin-left: .4rem;
-      vertical-align: middle;
-      font-weight: normal;
-    }
-    .btn-copy:hover { border-color: var(--accent); color: var(--text); opacity: 1; }
-    .btn-copy.copied { border-color: var(--green); color: var(--green); }
-
     /* ── Action buttons ──────────────────────────────────────────────── */
     .action-row {
       display: flex;
@@ -148,10 +140,13 @@
     button:disabled { opacity: .4; cursor: default; }
     button:not(:disabled):hover { opacity: .85; }
 
-    .btn-start     { background: var(--accent); color: #fff; }
-    .btn-resume    { background: none; color: var(--accent); border: 1px solid var(--accent); }
-    .btn-kill      { background: #3a1a1a; color: var(--red); border: 1px solid var(--red); }
-    .btn-reconnect { background: #1a2a3a; color: #6ab4f7; border: 1px solid #3a5a7a; }
+    .btn-connect   { background: var(--accent); color: #fff; }
+    .btn-kill      { background: none; color: var(--muted); border: 1px solid var(--border); font-weight: normal; }
+    .btn-kill:not(:disabled):hover { border-color: var(--red); color: var(--red); opacity: 1; }
+    .btn-pull      { background: none; color: var(--muted); border: 1px solid var(--border); font-weight: normal; }
+    .btn-pull:hover { border-color: var(--green); color: var(--green); opacity: 1; }
+    .btn-pull.ok   { border-color: var(--green); color: var(--green); }
+    .btn-pull.err  { border-color: var(--red); color: var(--red); }
 
     /* ── Session history ─────────────────────────────────────────────── */
     .history-toggle {
@@ -207,6 +202,70 @@
       font-size: .88rem;
       display: none;
     }
+
+    /* ── Diff modal ──────────────────────────────────────────────────── */
+    #diff-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.6);
+      z-index: 100;
+      align-items: flex-end;
+    }
+    #diff-overlay.open { display: flex; }
+
+    #diff-sheet {
+      background: var(--surface2);
+      border-top: 1px solid var(--border);
+      border-radius: var(--radius) var(--radius) 0 0;
+      width: 100%;
+      max-height: 85vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    #diff-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: .6rem 1rem;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    #diff-title { font-size: .9rem; font-weight: 600; color: var(--text); }
+    #diff-close {
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 1.3rem;
+      line-height: 1;
+      padding: .2rem .5rem;
+      cursor: pointer;
+    }
+    #diff-close:hover { color: var(--text); opacity: 1; }
+
+    #diff-body {
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: .75rem 1rem;
+      flex: 1;
+    }
+
+    #diff-body pre {
+      font-family: ui-monospace, monospace;
+      font-size: .75rem;
+      line-height: 1.5;
+      white-space: pre;
+      margin: 0;
+    }
+
+    .diff-add  { color: var(--green); }
+    .diff-del  { color: var(--red); }
+    .diff-hunk { color: var(--accent); }
+    .diff-meta { color: var(--muted); }
+
+    .git-diff-stat { cursor: pointer; }
+    .git-diff-stat:hover { color: var(--text); }
   </style>
 </head>
 <body>
@@ -218,6 +277,16 @@
 
 <div id="error-banner"></div>
 <div id="project-list"></div>
+
+<div id="diff-overlay" onclick="closeDiff(event)">
+  <div id="diff-sheet">
+    <div id="diff-header">
+      <span id="diff-title">git diff</span>
+      <button id="diff-close" onclick="closeDiff()">✕</button>
+    </div>
+    <div id="diff-body"><pre id="diff-pre"></pre></div>
+  </div>
+</div>
 <div id="empty-state">No projects found.<br>Check your <code>projects_dir</code> in config.</div>
 
 <script>
@@ -269,14 +338,16 @@
       <div class="project-header">
         <div class="project-name">
           ${escHtml(project.name)}
-          ${project.has_git ? '<span class="git-badge">git</span>' : ''}
+          ${project.git_branch ? `<span class="git-badge">${escHtml(project.git_branch)}</span>` : (project.has_git ? '<span class="git-badge">git</span>' : '')}
         </div>
         <span class="status-badge status-loading" id="badge-${project.name}">…</span>
       </div>
+      ${project.git_diff_stat ? `<div class="git-diff-stat" onclick="showDiff('${project.name}')">~ ${escHtml(project.git_diff_stat)}</div>` : ''}
       <div class="rc-url-row" id="url-${project.name}"></div>
       <div class="action-row" id="actions-${project.name}">
-        <button class="btn-start" onclick="startSession('${project.name}')" id="btn-start-${project.name}">Start</button>
-        <button class="btn-kill"  onclick="killSession('${project.name}')"  id="btn-kill-${project.name}"  disabled>Kill</button>
+        <button class="btn-connect" onclick="connectSession('${project.name}')" id="btn-connect-${project.name}">Connect</button>
+        <button class="btn-kill"    onclick="killSession('${project.name}')"    id="btn-kill-${project.name}" disabled>Kill</button>
+        ${project.has_git ? `<button class="btn-pull" onclick="gitPull(this,'${project.name}')" id="btn-pull-${project.name}">↓ Pull</button>` : ''}
       </div>
       <button class="history-toggle" id="hist-toggle-${project.name}"
               onclick="toggleHistory('${project.name}')" style="display:none">
@@ -288,30 +359,23 @@
   }
 
   // ── Session actions ────────────────────────────────────────────────────
-  async function startSession(name) {
-    const btn = document.getElementById(`btn-start-${name}`);
+  async function connectSession(name) {
+    const state = sessionState[name];
+    if (state && state.status === 'running' && state.rc_url) {
+      window.open(state.rc_url, '_blank', 'noopener');
+      return;
+    }
+    const btn = document.getElementById(`btn-connect-${name}`);
     if (btn) { btn.disabled = true; btn.textContent = 'Starting…'; }
-    setBusy(name, true);
     try {
       const res = await fetch(`/api/sessions/${encodeURIComponent(name)}`, { method: 'POST' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      applyState(name, await res.json());
+      const data = await res.json();
+      applyState(name, data);
+      if (data.rc_url) window.open(data.rc_url, '_blank', 'noopener');
     } catch (err) {
       showError('Failed to start session: ' + err.message);
-      setBusy(name, false);
-      if (btn) btn.textContent = 'Start';
-    }
-  }
-
-  async function resumeSession(name) {
-    setBusy(name, true);
-    try {
-      const res = await fetch(`/api/sessions/${encodeURIComponent(name)}/resume`, { method: 'POST' });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      applyState(name, await res.json());
-    } catch (err) {
-      showError('Failed to resume session: ' + err.message);
-      setBusy(name, false);
+      if (btn) { btn.disabled = false; btn.textContent = 'Connect'; }
     }
   }
 
@@ -397,38 +461,16 @@
     toggle.textContent = (open ? '▾' : '▸') + ` History (${count})`;
   }
 
-  function updateResumeButton(name) {
-    const state = sessionState[name];
-    const history = historyCache[name] || [];
-    const actionsRow = document.getElementById(`actions-${name}`);
-    if (!actionsRow) return;
-
-    const resumeId = `btn-resume-${name}`;
-    let btn = document.getElementById(resumeId);
-
-    const shouldShow = history.length > 0 && (!state || state.status !== 'running');
-    if (shouldShow) {
-      if (!btn) {
-        btn = document.createElement('button');
-        btn.id = resumeId;
-        btn.className = 'btn-resume';
-        btn.textContent = 'Resume';
-        btn.onclick = () => resumeSession(name);
-        actionsRow.appendChild(btn);
-      }
-    } else if (btn) {
-      btn.remove();
-    }
-  }
+  function updateResumeButton(_name) { /* no-op: Connect handles start+resume */ }
 
   // ── UI helpers ─────────────────────────────────────────────────────────
   function applyState(name, data) {
     sessionState[name] = data;
 
-    const badge    = document.getElementById(`badge-${name}`);
-    const urlRow   = document.getElementById(`url-${name}`);
-    const btnStart = document.getElementById(`btn-start-${name}`);
-    const btnKill  = document.getElementById(`btn-kill-${name}`);
+    const badge      = document.getElementById(`badge-${name}`);
+    const urlRow     = document.getElementById(`url-${name}`);
+    const btnConnect = document.getElementById(`btn-connect-${name}`);
+    const btnKill    = document.getElementById(`btn-kill-${name}`);
     if (!badge) return;
 
     const status = data.status || 'stopped';
@@ -436,45 +478,25 @@
     badge.className = `status-badge status-${status}`;
 
     if (data.rc_url) {
-      urlRow.innerHTML = `RC: <a href="${escHtml(data.rc_url)}" target="_blank" rel="noopener">${escHtml(data.rc_url)}</a>`
-        + `<button class="btn-copy" onclick="copyUrl(this,'${escHtml(data.rc_url)}')">Copy</button>`;
+      urlRow.innerHTML = `RC: <a href="${escHtml(data.rc_url)}" target="_blank" rel="noopener">${escHtml(data.rc_url)}</a>`;
     } else {
       urlRow.innerHTML = '';
     }
 
     const running = status === 'running';
-    btnStart.disabled = running;
-    btnKill.disabled  = !running;
-
-    // Reconnect button — only when running and URL known
-    const reconnectId = `btn-reconnect-${name}`;
-    let reconnectBtn = document.getElementById(reconnectId);
-    if (running && data.rc_url) {
-      if (!reconnectBtn) {
-        reconnectBtn = document.createElement('button');
-        reconnectBtn.id = reconnectId;
-        reconnectBtn.className = 'btn-reconnect';
-        reconnectBtn.textContent = 'Reconnect';
-        const actionsRow = document.getElementById(`actions-${name}`);
-        actionsRow.appendChild(reconnectBtn);
-      }
-      reconnectBtn.onclick = () => window.open(data.rc_url, '_blank', 'noopener');
-    } else if (reconnectBtn) {
-      reconnectBtn.remove();
-    }
+    if (btnConnect) { btnConnect.disabled = false; btnConnect.textContent = 'Connect'; }
+    if (btnKill)    { btnKill.disabled = !running; }
 
     updateResumeButton(name);
   }
 
   function setBusy(name, busy) {
-    const btnStart  = document.getElementById(`btn-start-${name}`);
-    const btnKill   = document.getElementById(`btn-kill-${name}`);
-    const btnResume = document.getElementById(`btn-resume-${name}`);
-    if (!btnStart) return;
+    const btnConnect = document.getElementById(`btn-connect-${name}`);
+    const btnKill    = document.getElementById(`btn-kill-${name}`);
+    if (!btnConnect) return;
     if (busy) {
-      btnStart.disabled = true;
-      btnKill.disabled  = true;
-      if (btnResume) { btnResume.disabled = true; btnResume.textContent = 'Starting…'; }
+      btnConnect.disabled = true;
+      if (btnKill) btnKill.disabled = true;
     } else {
       const state = sessionState[name];
       if (state) applyState(name, state);
@@ -487,12 +509,67 @@
     else { banner.style.display = 'none'; }
   }
 
-  function copyUrl(btn, url) {
-    navigator.clipboard.writeText(url).then(() => {
-      btn.textContent = 'Copied!';
-      btn.classList.add('copied');
-      setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
-    });
+  async function gitPull(btn, name) {
+    btn.disabled = true;
+    btn.textContent = 'Pulling…';
+    btn.classList.remove('ok', 'err');
+    try {
+      const res = await fetch(`/api/projects/${encodeURIComponent(name)}/git-pull`, { method: 'POST' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (data.returncode === 0) {
+        btn.textContent = '✓ Pulled';
+        btn.classList.add('ok');
+      } else {
+        btn.textContent = '✗ Error';
+        btn.classList.add('err');
+        showError(`git pull failed: ${data.stderr || data.stdout}`);
+      }
+    } catch (err) {
+      btn.textContent = '✗ Error';
+      btn.classList.add('err');
+      showError('git pull failed: ' + err.message);
+    } finally {
+      btn.disabled = false;
+      setTimeout(() => { btn.textContent = '↓ Pull'; btn.classList.remove('ok', 'err'); }, 3000);
+    }
+  }
+
+  async function showDiff(name) {
+    document.getElementById('diff-title').textContent = `git diff — ${name}`;
+    const pre = document.getElementById('diff-pre');
+    pre.innerHTML = '<span style="color:var(--muted)">Loading…</span>';
+    document.getElementById('diff-overlay').classList.add('open');
+    document.body.style.overflow = 'hidden';
+    try {
+      const res = await fetch(`/api/projects/${encodeURIComponent(name)}/git-diff`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const { diff } = await res.json();
+      pre.innerHTML = diff ? colorDiff(diff) : '<span style="color:var(--muted)">No changes.</span>';
+    } catch (err) {
+      pre.innerHTML = `<span style="color:var(--red)">Error: ${escHtml(err.message)}</span>`;
+    }
+  }
+
+  function closeDiff(e) {
+    if (e && e.target !== document.getElementById('diff-overlay')) return;
+    document.getElementById('diff-overlay').classList.remove('open');
+    document.body.style.overflow = '';
+  }
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeDiff();
+  });
+
+  function colorDiff(text) {
+    return text.split('\n').map(line => {
+      const s = escHtml(line);
+      if (line.startsWith('@@'))          return `<span class="diff-hunk">${s}</span>`;
+      if (line.startsWith('+++') || line.startsWith('---') || line.startsWith('diff') || line.startsWith('index')) return `<span class="diff-meta">${s}</span>`;
+      if (line.startsWith('+'))           return `<span class="diff-add">${s}</span>`;
+      if (line.startsWith('-'))           return `<span class="diff-del">${s}</span>`;
+      return s;
+    }).join('\n');
   }
 
   function escHtml(str) {

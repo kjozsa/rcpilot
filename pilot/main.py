@@ -84,6 +84,38 @@ def get_projects() -> list[dict]:
     return list_projects(_config.projects_dir)  # type: ignore[return-value]
 
 
+@app.get("/api/projects/{project}/git-diff")
+def git_diff(project: str) -> dict:
+    import subprocess
+    path = _get_project_path(project)
+    result = subprocess.run(
+        ["git", "diff"],
+        cwd=path,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    return {"diff": result.stdout}
+
+
+@app.post("/api/projects/{project}/git-pull")
+def git_pull(project: str) -> dict:
+    import subprocess
+    path = _get_project_path(project)
+    result = subprocess.run(
+        ["git", "pull"],
+        cwd=path,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    return {
+        "returncode": result.returncode,
+        "stdout": result.stdout.strip(),
+        "stderr": result.stderr.strip(),
+    }
+
+
 # ---------------------------------------------------------------------------
 # Sessions
 # ---------------------------------------------------------------------------
