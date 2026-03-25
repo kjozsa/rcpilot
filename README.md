@@ -12,12 +12,9 @@ web UI to launch, reconnect to, and eventually persist your coding sessions.
 ## Quick start
 
 ```bash
-# One-liner — no install required
-uvx claude-pilot
-
-# Or install permanently
-uv tool install claude-pilot
-pilot          # then just run this
+git clone <repo>
+cd claude-pilot
+uv run pilot
 ```
 
 The server starts on **http://0.0.0.0:8000** by default.
@@ -39,6 +36,13 @@ port = 8000
 
 # Prefix for tmux session names — avoids collisions with your own sessions
 tmux_session_prefix = "pilot-"
+
+# How claude is spawned: "session" | "same-dir" | "worktree"
+# "session" produces a /session_xxx URL the Claude mobile app handles correctly
+spawn_mode = "session"
+
+# SQLite database path
+db_path = "~/.config/claude-pilot/pilot.db"
 ```
 
 All fields are optional — the defaults above apply when the file is absent.
@@ -53,10 +57,12 @@ All fields are optional — the defaults above apply when the file is absent.
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-### 2. Install claude-pilot
+### 2. Clone and install claude-pilot
 
 ```bash
-uv tool install claude-pilot
+git clone <repo>
+cd claude-pilot
+uv sync
 ```
 
 ### 3. Create your config
@@ -79,7 +85,7 @@ Description=claude-pilot session manager
 After=network.target
 
 [Service]
-ExecStart=/home/pi/.local/bin/pilot
+ExecStart=/home/pi/claude-pilot/.venv/bin/pilot
 User=pi
 Restart=on-failure
 
@@ -135,8 +141,8 @@ See [ROADMAP.md](ROADMAP.md) for the full plan.
 | Phase | Status | Highlights |
 |-------|--------|-----------|
 | 0 — Foundation | ✅ done | Project discovery, tmux sessions, web UI |
-| 1 — Persistence | 🔜 next | SQLite session history, auto-restart watchdog |
-| 2 — Context memory | 💡 planned | Claude API summarization, resume with context |
+| 1 — Persistence | ✅ done | SQLite session history, watchdog, session naming, multiple concurrent sessions |
+| 2 — Context memory | 🔜 next | Claude API summarization, resume with context |
 | 3 — Polish | 💡 planned | Docker, auth, PWA, PyPI publish |
 
 ---

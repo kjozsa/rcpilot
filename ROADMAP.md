@@ -12,36 +12,42 @@ claude-pilot is a lightweight, self-hosted session manager for Claude Code Remot
 
 ---
 
-## Phase 0 — Foundation ✦ *current focus*
+## Phase 0 — Foundation ✅ *done*
 
 The skeleton. Enough to be useful on day one.
 
-- [ ] FastAPI app scaffold, deployable via `uvx claude-pilot` or `uv tool install claude-pilot`
-- [ ] Configurable projects directory (via `config.toml` or env vars)
-- [ ] Project discovery — scans directory, lists projects in web UI
-- [ ] Spawn `claude remote-control` for a selected project into a `tmux` session
-- [ ] Capture RC session URL from process stdout, surface it in the UI
-- [ ] Basic session status per project — running / stopped / timed out
-- [ ] Kill and restart a session from the UI
-- [ ] Mobile-friendly web UI (accessed via VPN, no auth needed for v0)
-- [ ] README with Pi setup guide and VPN access notes
+- [x] FastAPI app scaffold, deployable via `uvx claude-pilot` or `uv tool install claude-pilot`
+- [x] Configurable projects directory (via `config.toml` or env vars)
+- [x] Project discovery — scans directory, lists projects in web UI
+- [x] Spawn `claude remote-control` for a selected project into a `tmux` session
+- [x] Capture RC session URL from process stdout, surface it in the UI
+- [x] Basic session status per project — running / stopped / timed out
+- [x] Kill and restart a session from the UI
+- [x] Mobile-friendly web UI (accessed via VPN, no auth needed for v0)
+- [x] README with Pi setup guide and VPN access notes
 
 ---
 
-## Phase 1 — Persistence & Continuity
+## Phase 1 — Persistence & Continuity ✅ *done*
 
 The thing RC fundamentally lacks: memory across sessions.
 
-- [ ] SQLite store for session history per project (start time, duration, status)
-- [ ] Session log capture — store user prompts and Claude responses per session
-- [ ] Session list view per project — see all past sessions with timestamps
-- [ ] "Resume" button — relaunch RC with last session metadata pre-loaded
-- [ ] Auto-restart watchdog — detect RC timeout/crash, relaunch automatically
-- [ ] Session naming — auto-name sessions by date, allow manual rename
+- [x] SQLite store for session history per project (start time, duration, status)
+- [x] Pane snapshot capture — raw terminal output stored on session end
+- [x] Session list view per project — see all past sessions with timestamps
+- [x] Multiple concurrent sessions per project
+- [x] Auto-restart watchdog — detect RC timeout/crash, mark session stopped
+- [x] Session naming — auto-name sessions by date, allow manual rename
+- [x] Clear session history per project
+- [x] `send-keys` endpoint — send text to the active tmux session from the UI
+- [x] `run-claude` endpoint — run `claude -p <prompt>` in project dir
+- [x] `review-pr` endpoint — fetch a GitHub PR via `gh` and review with Claude
+- [x] Git diff and git pull endpoints per project
+- [ ] "Resume" button — relaunch RC with last session context pre-loaded
 
 ---
 
-## Phase 2 — Context Memory via Claude API
+## Phase 2 — Context Memory via Claude API ✦ *current focus*
 
 Where it gets smart. Uses the Claude API to make resuming sessions actually meaningful.
 

@@ -8,4 +8,5 @@ if test -n "$pid"
 end
 
 echo "Starting pilot..."
-uv run pilot
+uv run pilot &
+disown
