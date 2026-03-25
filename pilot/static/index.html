@@ -140,7 +140,9 @@
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      cursor: pointer;
     }
+    .session-label:active { opacity: .6; }
 
     .btn-open-session {
       color: var(--green);
@@ -952,11 +954,48 @@
     if (!sessions || sessions.length === 0) { container.innerHTML = ''; return; }
     container.innerHTML = sessions.map(s => `
       <div class="session-row">
-        <span class="session-label">${escHtml(s.name || 'unnamed')}</span>
+        <span class="session-label" title="Tap to rename" onclick="startRunningSessionRename('${escHtml(name)}', ${s.id}, this)">${escHtml(s.name || 'unnamed')}</span>
         ${s.rc_url ? `<a href="${escHtml(s.rc_url)}" target="_blank" rel="noopener" class="btn-open-session">Open ↗</a>` : ''}
         <button class="btn-kill-session" onclick="killSession('${escHtml(name)}', ${s.id})">💣 Kill</button>
       </div>
     `).join('');
+  }
+
+  function startRunningSessionRename(projectName, sessionId, labelEl) {
+    const currentName = labelEl.textContent.trim();
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = currentName;
+    input.className = 'name-input';
+    input.style.cssText = 'flex:1; min-width:0;';
+    labelEl.replaceWith(input);
+    input.focus();
+    input.select();
+
+    let saved = false;
+    const save = async () => {
+      if (saved) return;
+      saved = true;
+      const newName = input.value.trim();
+      if (newName && newName !== currentName) {
+        try {
+          const res = await fetch(
+            `/api/sessions/${encodeURIComponent(projectName)}/history/${sessionId}`,
+            { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: newName }) }
+          );
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        } catch (err) {
+          showError('Rename failed: ' + err.message);
+        }
+      }
+      await refreshStatus(projectName);
+    };
+
+    input.addEventListener('blur', save);
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); save(); }
+      if (e.key === 'Escape') { saved = true; refreshStatus(projectName); }
+    });
   }
 
   function updateCardBadge(name, sessions) {
