@@ -127,6 +127,12 @@
       display: flex;
       gap: .5rem;
       margin-top: .75rem;
+    }
+
+    .git-row {
+      display: flex;
+      gap: .5rem;
+      margin-top: .5rem;
       flex-wrap: wrap;
     }
 
@@ -710,10 +716,13 @@
       <div class="action-row" id="actions-${project.name}">
         <button class="btn-connect" onclick="connectSession('${project.name}')" id="btn-connect-${project.name}">Connect</button>
         <button class="btn-kill"    onclick="killSession('${project.name}')"    id="btn-kill-${project.name}" disabled>Kill</button>
-        ${project.has_git ? `<button class="btn-pull" onclick="gitPull(this,'${project.name}')" id="btn-pull-${project.name}">↓ Pull</button>` : ''}
-        ${project.has_git ? `<button class="btn-commit" onclick="openCommitSend('${project.name}')" id="btn-commit-${project.name}">↑ Commit & Push</button>` : ''}
-        ${project.has_git ? `<input type="number" class="pr-input" placeholder="PR #" min="1" id="pr-input-${project.name}"><button class="btn-review-pr" onclick="openPRReview('${project.name}')">Review PR</button>` : ''}
+        ${project.has_git ? `<button class="btn-pull" style="margin-left:auto" onclick="gitPull(this,'${project.name}')" id="btn-pull-${project.name}">↓ Pull</button>` : ''}
       </div>
+      ${project.has_git ? `
+      <div class="git-row">
+        <input type="number" class="pr-input" placeholder="PR #" min="1" id="pr-input-${project.name}"><button class="btn-review-pr" onclick="openPRReview('${project.name}')">Review PR</button>
+        <button class="btn-commit" style="margin-left:auto" onclick="openCommitSend('${project.name}')" id="btn-commit-${project.name}">↑ Commit & Push</button>
+      </div>` : ''}
       <div class="history-header">
         <button class="history-toggle" id="hist-toggle-${project.name}"
                 onclick="toggleHistory('${project.name}')" style="display:none">
