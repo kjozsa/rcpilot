@@ -19,6 +19,8 @@
       --green:     #3ecf8e;
       --red:       #f66;
       --yellow:    #f5a623;
+      --blue:      #4a9eff;
+      --cyan:      #2dd4bf;
       --radius:    10px;
       --gap:       1rem;
     }
@@ -135,24 +137,22 @@
       font-size: .88rem;
       font-weight: 600;
       cursor: pointer;
-      transition: opacity .15s;
+      transition: opacity .1s, transform .1s;
     }
     button:disabled { opacity: .4; cursor: default; }
-    button:not(:disabled):hover { opacity: .85; }
+    button:not(:disabled):active { transform: scale(.94); opacity: .75; }
 
-    .btn-connect   { background: var(--accent); color: #fff; }
+    .btn-connect   { background: rgba(62,207,142,.15); color: var(--green); border: 1px solid rgba(62,207,142,.4); box-shadow: 0 2px 8px rgba(62,207,142,.15); }
     .yolo-label    { display: flex; align-items: center; gap: .35rem; font-size: .78rem; color: var(--muted); cursor: pointer; user-select: none; }
     .yolo-label input[type=checkbox] { accent-color: var(--red); cursor: pointer; }
     .yolo-label:has(input:checked) { color: var(--red); }
     .btn-kill      { background: none; color: var(--muted); border: 1px solid var(--border); font-weight: normal; }
-    .btn-kill:not(:disabled) { border-color: var(--red); color: var(--red); }
-    .btn-kill:not(:disabled):hover { opacity: .75; }
-    .btn-pull      { background: none; color: var(--muted); border: 1px solid var(--border); font-weight: normal; }
-    .btn-pull:hover { border-color: var(--green); color: var(--green); opacity: 1; }
-    .btn-pull.ok   { border-color: var(--green); color: var(--green); }
-    .btn-pull.err  { border-color: var(--red); color: var(--red); }
-    .btn-commit    { background: none; color: var(--muted); border: 1px solid var(--border); font-weight: normal; }
-    .btn-commit:not(:disabled):hover { border-color: var(--accent); color: var(--accent); opacity: 1; }
+    .btn-kill:not(:disabled) { border-color: rgba(255,102,102,.5); color: var(--red); background: rgba(255,102,102,.1); }
+    .btn-pull      { background: rgba(74,158,255,.1); color: var(--blue); border: 1px solid rgba(74,158,255,.35); font-weight: normal; }
+    .btn-pull.ok   { border-color: var(--green); color: var(--green); background: rgba(62,207,142,.1); }
+    .btn-pull.err  { border-color: var(--red); color: var(--red); background: rgba(255,102,102,.1); }
+    .btn-commit    { background: rgba(245,166,35,.1); color: var(--yellow); border: 1px solid rgba(245,166,35,.35); font-weight: normal; }
+    .btn-commit:disabled { background: none; color: var(--muted); border-color: var(--border); }
 
     /* ── Commit & Push modal ─────────────────────────────────────────── */
     #send-overlay {
@@ -513,9 +513,9 @@
 
     /* ── PR Review ───────────────────────────────────────────────────── */
     .pr-input {
-      background: var(--surface);
-      color: var(--text);
-      border: 1px solid var(--border);
+      background: rgba(124,106,247,.12);
+      color: #b8aeff;
+      border: 1px solid rgba(124,106,247,.4);
       border-radius: var(--radius);
       padding: .4rem .5rem;
       font-size: .82rem;
@@ -524,10 +524,10 @@
     }
     .pr-input::-webkit-outer-spin-button,
     .pr-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-    .pr-input:focus { outline: none; border-color: var(--accent); }
+    .pr-input:focus { outline: none; border-color: var(--accent); background: rgba(124,106,247,.2); }
+    .pr-input::placeholder { color: rgba(184,174,255,.45); }
 
-    .btn-review-pr { background: none; color: var(--muted); border: 1px solid var(--border); font-weight: normal; }
-    .btn-review-pr:not(:disabled):hover { border-color: var(--accent); color: var(--accent); opacity: 1; }
+    .btn-review-pr { background: rgba(124,106,247,.12); color: #b8aeff; border: 1px solid rgba(124,106,247,.4); font-weight: normal; }
 
     #pr-review-overlay {
       display: none;
