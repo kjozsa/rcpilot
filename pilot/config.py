@@ -12,6 +12,28 @@ import tomllib  # stdlib since Python 3.11
 from dataclasses import dataclass, field
 from pathlib import Path
 
+_DEFAULT_CONFIG_TEMPLATE = """\
+# claude-pilot configuration
+# See https://github.com/your-org/claude-pilot for full documentation.
+
+# Directory scanned for projects — each immediate subdirectory is a project.
+projects_dir = "~/projects"
+
+# Uvicorn bind host; 0.0.0.0 makes it reachable over a VPN.
+host = "0.0.0.0"
+port = 8000
+
+# Prefix prepended to every tmux session name to avoid collisions.
+tmux_session_prefix = "pilot-"
+
+# How claude is spawned. Options: "session" | "same-dir" | "worktree"
+# "session" produces a /session_xxx URL that the Claude mobile app handles correctly.
+spawn_mode = "session"
+
+# SQLite database file path.
+db_path = "~/.config/claude-pilot/pilot.db"
+"""
+
 
 DEFAULT_CONFIG_PATH = Path.home() / ".config" / "claude-pilot" / "config.toml"
 
@@ -43,6 +65,10 @@ def load_config(path: Path | None = None) -> Config:
         path = Path(env_path) if env_path else DEFAULT_CONFIG_PATH
 
     if not path.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(_DEFAULT_CONFIG_TEMPLATE)
+        from loguru import logger
+        logger.info("created default config at {}", path)
         return Config()
 
     with open(path, "rb") as fh:

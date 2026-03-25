@@ -147,6 +147,128 @@
     .btn-pull:hover { border-color: var(--green); color: var(--green); opacity: 1; }
     .btn-pull.ok   { border-color: var(--green); color: var(--green); }
     .btn-pull.err  { border-color: var(--red); color: var(--red); }
+    .btn-commit    { background: none; color: var(--muted); border: 1px solid var(--border); font-weight: normal; }
+    .btn-commit:not(:disabled):hover { border-color: var(--accent); color: var(--accent); opacity: 1; }
+
+    /* ── Commit & Push modal ─────────────────────────────────────────── */
+    #send-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.6);
+      z-index: 100;
+      align-items: flex-end;
+    }
+    #send-overlay.open { display: flex; }
+
+    #send-sheet {
+      background: var(--surface2);
+      border-top: 1px solid var(--border);
+      border-radius: var(--radius) var(--radius) 0 0;
+      width: 100%;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: .75rem;
+    }
+
+    #send-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    #send-title { font-size: .9rem; font-weight: 600; color: var(--text); }
+    #send-close {
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 1.3rem;
+      line-height: 1;
+      padding: .2rem .5rem;
+      cursor: pointer;
+    }
+    #send-close:hover { color: var(--text); opacity: 1; }
+
+    #send-analyzing {
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+      color: var(--muted);
+      font-size: .9rem;
+      padding: .5rem 0;
+    }
+    .send-spinner {
+      width: 16px;
+      height: 16px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+      flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .send-label {
+      display: block;
+      font-size: .8rem;
+      color: var(--muted);
+      margin-bottom: .35rem;
+    }
+    #send-textarea {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: .6rem .75rem;
+      font-size: .85rem;
+      font-family: inherit;
+      line-height: 1.5;
+      resize: vertical;
+      width: 100%;
+    }
+    #send-textarea:focus { outline: none; border-color: var(--accent); }
+
+    #send-pre {
+      font-family: ui-monospace, monospace;
+      font-size: .75rem;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-all;
+      max-height: 40vh;
+      overflow-y: auto;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: .5rem .75rem;
+      margin: 0;
+      color: var(--text);
+    }
+
+    #send-footer {
+      display: flex;
+      gap: .5rem;
+      justify-content: flex-end;
+    }
+    #send-btn {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius);
+      padding: .5rem 1.25rem;
+      font-size: .88rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    #send-btn:disabled { opacity: .4; cursor: default; }
+    #send-cancel {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      border-radius: var(--radius);
+      padding: .5rem 1rem;
+      font-size: .88rem;
+      cursor: pointer;
+    }
 
     /* ── Session history ─────────────────────────────────────────────── */
     .history-toggle {
@@ -405,6 +527,29 @@
     <div id="diff-body"><pre id="diff-pre"></pre></div>
   </div>
 </div>
+<div id="send-overlay" onclick="closeSend(event)">
+  <div id="send-sheet">
+    <div id="send-header">
+      <span id="send-title">Commit &amp; Push</span>
+      <button id="send-close" onclick="closeSend()">✕</button>
+    </div>
+    <div id="send-analyzing">
+      <div class="send-spinner"></div>
+      <span>Analyzing changes…</span>
+    </div>
+    <div id="send-review" style="display:none">
+      <label class="send-label">Proposed commit message</label>
+      <textarea id="send-textarea" rows="3"></textarea>
+    </div>
+    <div id="send-output-area" style="display:none">
+      <pre id="send-pre"></pre>
+    </div>
+    <div id="send-footer">
+      <button id="send-cancel" onclick="closeSend()">Cancel</button>
+      <button id="send-btn" style="display:none" onclick="submitCommit()">Commit &amp; Push ↑</button>
+    </div>
+  </div>
+</div>
 <div id="snapshot-overlay" onclick="closeSnapshot(event)">
   <div id="snapshot-sheet">
     <div id="snapshot-header">
@@ -473,8 +618,9 @@
       <div class="rc-url-row" id="url-${project.name}"></div>
       <div class="action-row" id="actions-${project.name}">
         <button class="btn-connect" onclick="connectSession('${project.name}')" id="btn-connect-${project.name}">Connect</button>
-        <button class="btn-kill"    onclick="killSession('${project.name}')"    id="btn-kill-${project.name}" disabled>Kill</button>
+        <button class="btn-kill"    onclick="killSession('${project.name}')"    id="btn-kill-${project.name}" disabled style="display:none">Kill</button>
         ${project.has_git ? `<button class="btn-pull" onclick="gitPull(this,'${project.name}')" id="btn-pull-${project.name}">↓ Pull</button>` : ''}
+        ${project.has_git ? `<button class="btn-commit" onclick="openCommitSend('${project.name}')" id="btn-commit-${project.name}">↑ Commit & Push</button>` : ''}
       </div>
       <div class="history-header">
         <button class="history-toggle" id="hist-toggle-${project.name}"
@@ -667,6 +813,110 @@
     document.body.style.overflow = '';
   }
 
+  // ── Commit & Push ──────────────────────────────────────────────────────
+  let _sendProject = null;
+
+  function openCommitSend(name) {
+    _sendProject = name;
+    document.getElementById('send-title').textContent = `Commit & Push — ${name}`;
+    setSendState('analyzing');
+    document.getElementById('send-overlay').classList.add('open');
+    document.body.style.overflow = 'hidden';
+    analyzeChanges(name);
+  }
+
+  function setSendState(state, content) {
+    const analyzing   = document.getElementById('send-analyzing');
+    const review      = document.getElementById('send-review');
+    const outputArea  = document.getElementById('send-output-area');
+    const pre         = document.getElementById('send-pre');
+    const btn         = document.getElementById('send-btn');
+    const cancelBtn   = document.getElementById('send-cancel');
+    const title       = document.getElementById('send-title');
+
+    analyzing.style.display  = state === 'analyzing'  ? 'flex'  : 'none';
+    review.style.display     = state === 'review'      ? 'block' : 'none';
+    outputArea.style.display = (state === 'committing' || state === 'done' || state === 'error') ? 'block' : 'none';
+
+    btn.style.display = state === 'review' ? 'inline-block' : 'none';
+    btn.disabled = false;
+
+    if (state === 'review') {
+      cancelBtn.textContent = 'Cancel';
+      cancelBtn.disabled = false;
+      setTimeout(() => document.getElementById('send-textarea').focus(), 50);
+    } else if (state === 'committing') {
+      title.textContent = 'Committing…';
+      pre.style.color = 'var(--text)';
+      pre.textContent = 'Running…';
+      cancelBtn.disabled = true;
+    } else if (state === 'done') {
+      title.textContent = 'Done ✓';
+      pre.style.color = 'var(--green)';
+      pre.textContent = content || '';
+      cancelBtn.textContent = 'Close';
+      cancelBtn.disabled = false;
+    } else if (state === 'error') {
+      title.textContent = 'Error';
+      pre.style.color = 'var(--red)';
+      pre.textContent = content || 'Unknown error';
+      cancelBtn.textContent = 'Close';
+      cancelBtn.disabled = false;
+    }
+  }
+
+  async function analyzeChanges(name) {
+    try {
+      const prompt =
+        'Look at the current git status and diff. ' +
+        'Output ONLY a single commit message line — no explanation, no quotes, no prefix. ' +
+        'Use imperative mood, under 72 chars. ' +
+        'If there are no changes to commit, output exactly: NO_CHANGES';
+      const res = await fetch(`/api/projects/${encodeURIComponent(name)}/run-claude`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const { output, error, returncode } = await res.json();
+      if (returncode !== 0) throw new Error(error || output || 'claude exited with an error');
+      if (output.trim() === 'NO_CHANGES') throw new Error('No changes to commit.');
+      document.getElementById('send-textarea').value = output.trim();
+      setSendState('review');
+    } catch (err) {
+      setSendState('error', err.message);
+    }
+  }
+
+  async function submitCommit() {
+    const message = document.getElementById('send-textarea').value.trim();
+    if (!message || !_sendProject) return;
+    setSendState('committing');
+    try {
+      const prompt =
+        `Stage all changes (git add -A), create a commit with this exact message: "${message}", ` +
+        'then push to the remote branch. Show a brief summary of what you did.';
+      const res = await fetch(`/api/projects/${encodeURIComponent(_sendProject)}/run-claude`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const { output, error, returncode } = await res.json();
+      setSendState(returncode === 0 ? 'done' : 'error', output || error);
+    } catch (err) {
+      setSendState('error', err.message);
+    }
+  }
+
+  function closeSend(e) {
+    if (e && e.target !== document.getElementById('send-overlay')) return;
+    document.getElementById('send-overlay').classList.remove('open');
+    document.body.style.overflow = '';
+    document.getElementById('send-title').textContent = 'Commit & Push';
+    _sendProject = null;
+  }
+
   function toggleHistory(name) {
     const container = document.getElementById(`history-${name}`);
     const toggle = document.getElementById(`hist-toggle-${name}`);
@@ -712,6 +962,9 @@
     const running = status === 'running';
     if (btnConnect) { btnConnect.disabled = false; btnConnect.textContent = 'Connect'; }
     if (btnKill)    { btnKill.disabled = !running; }
+
+    const btnCommit = document.getElementById(`btn-commit-${name}`);
+    if (btnCommit)  { btnCommit.style.display = 'inline-block'; }
 
     updateResumeButton(name);
   }
@@ -784,7 +1037,7 @@
   }
 
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') { closeDiff(); closeSnapshot(); }
+    if (e.key === 'Escape') { closeDiff(); closeSnapshot(); closeSend(); }
   });
 
   function colorDiff(text) {

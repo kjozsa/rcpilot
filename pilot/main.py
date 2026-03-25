@@ -14,6 +14,7 @@ Routes (all sync — FastAPI runs them in a thread pool):
   PATCH  /api/sessions/{project}/history/{session_id}          → rename session
   DELETE /api/sessions/{project}/history                       → clear non-running sessions
   POST   /api/sessions/{project}/send                         → send keys to active tmux session
+  POST   /api/projects/{project}/run-claude                   → run claude -p in project dir
 """
 
 from __future__ import annotations
@@ -100,6 +101,28 @@ def git_diff(project: str) -> dict:
         timeout=15,
     )
     return {"diff": result.stdout}
+
+
+@app.post("/api/projects/{project}/run-claude")
+def run_claude(
+    project: str,
+    prompt: str = Body(..., embed=True),
+) -> dict:
+    """Run ``claude -p <prompt>`` in the project directory and return the output."""
+    import subprocess
+    path = _get_project_path(project)
+    result = subprocess.run(
+        ["claude", "-p", prompt],
+        cwd=path,
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+    return {
+        "output": result.stdout.strip(),
+        "error": result.stderr.strip(),
+        "returncode": result.returncode,
+    }
 
 
 @app.post("/api/projects/{project}/git-pull")
