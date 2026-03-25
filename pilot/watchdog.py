@@ -41,7 +41,8 @@ def _sweep(config: "Config") -> None:
     db_path = str(config.db_path)
     running = db.get_all_running_sessions(db_path)
     for record in running:
-        session_name = _tmux_session_name(config.tmux_session_prefix, record["project"])
+        # Use stored tmux_session name; fall back to legacy per-project name for old records
+        session_name = record.get("tmux_session") or _tmux_session_name(config.tmux_session_prefix, record["project"])
         if not _session_exists(session_name):
             logger.info(
                 "watchdog: tmux session '{}' is gone — marking session {} stopped",

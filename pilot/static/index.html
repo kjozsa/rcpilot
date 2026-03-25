@@ -114,14 +114,60 @@
     .status-timed_out { background: #3a2a10; color: var(--yellow); }
     .status-loading   { background: #2a2a3a; color: var(--accent); }
 
-    /* ── RC URL link ─────────────────────────────────────────────────── */
-    .rc-url-row {
+    /* ── Running sessions list ───────────────────────────────────────── */
+    .running-sessions {
       margin-top: .6rem;
-      font-size: .85rem;
-      word-break: break-all;
+      display: flex;
+      flex-direction: column;
+      gap: .35rem;
     }
-    .rc-url-row a { color: var(--accent); text-decoration: none; }
-    .rc-url-row a:hover { text-decoration: underline; }
+
+    .session-row {
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: .4rem .6rem;
+      font-size: .85rem;
+    }
+
+    .session-label {
+      flex: 1;
+      font-weight: 600;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .btn-open-session {
+      color: var(--green);
+      text-decoration: none;
+      font-size: .8rem;
+      font-weight: 600;
+      white-space: nowrap;
+      padding: .2rem .5rem;
+      border: 1px solid rgba(62,207,142,.35);
+      border-radius: 6px;
+      background: rgba(62,207,142,.08);
+      transition: opacity .1s, transform .1s;
+    }
+    .btn-open-session:active { transform: scale(.94); opacity: .75; }
+
+    .btn-kill-session {
+      background: rgba(255,102,102,.1);
+      color: var(--red);
+      border: 1px solid rgba(255,102,102,.35);
+      border-radius: 6px;
+      padding: .2rem .5rem;
+      font-size: .8rem;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: opacity .1s, transform .1s;
+    }
+    .btn-kill-session:active { transform: scale(.94); opacity: .75; }
     /* ── Action buttons ──────────────────────────────────────────────── */
     .action-row {
       display: flex;
@@ -591,6 +637,84 @@
       margin: 0;
       color: var(--text);
     }
+
+    /* ── New session modal ───────────────────────────────────────────── */
+    #newsession-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.6);
+      z-index: 100;
+      align-items: flex-start;
+      padding-top: 15vh;
+    }
+    #newsession-overlay.open { display: flex; }
+
+    #newsession-sheet {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      width: calc(100% - 2rem);
+      margin: 0 1rem;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: .75rem;
+    }
+
+    #newsession-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    #newsession-title { font-size: .9rem; font-weight: 600; color: var(--text); }
+    #newsession-close {
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 1.3rem;
+      line-height: 1;
+      padding: .2rem .5rem;
+      cursor: pointer;
+    }
+    #newsession-close:hover { color: var(--text); opacity: 1; }
+
+    #newsession-name {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: .6rem .75rem;
+      font-size: .95rem;
+      font-family: inherit;
+      width: 100%;
+    }
+    #newsession-name:focus { outline: none; border-color: var(--green); }
+
+    #newsession-footer {
+      display: flex;
+      gap: .5rem;
+      justify-content: flex-end;
+    }
+    #newsession-submit {
+      background: rgba(62,207,142,.15);
+      color: var(--green);
+      border: 1px solid rgba(62,207,142,.4);
+      border-radius: var(--radius);
+      padding: .5rem 1.25rem;
+      font-size: .88rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    #newsession-cancel {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      border-radius: var(--radius);
+      padding: .5rem 1rem;
+      font-size: .88rem;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
@@ -656,11 +780,24 @@
     <div id="pr-review-body"><pre id="pr-review-pre"></pre></div>
   </div>
 </div>
+<div id="newsession-overlay" onclick="closeNewSession(event)">
+  <div id="newsession-sheet">
+    <div id="newsession-header">
+      <span id="newsession-title">New session</span>
+      <button id="newsession-close" onclick="closeNewSession()">✕</button>
+    </div>
+    <input type="text" id="newsession-name" placeholder="e.g. fix-auth-bug" autocomplete="off" />
+    <div id="newsession-footer">
+      <button id="newsession-cancel" onclick="closeNewSession()">Cancel</button>
+      <button id="newsession-submit" onclick="submitNewSession()">⚡ Connect</button>
+    </div>
+  </div>
+</div>
 <div id="empty-state">No projects found.<br>Check your <code>projects_dir</code> in config.</div>
 
 <script>
   // ── State ──────────────────────────────────────────────────────────────
-  const sessionState = {};   // project name → { status, rc_url }
+  const sessionState = {};   // project name → array of running session objects
   const historyCache = {};   // project name → array of session records
 
   // ── Bootstrap ──────────────────────────────────────────────────────────
@@ -668,6 +805,9 @@
     loadProjects();
     fetch('/api/info').then(r => r.json()).then(d => {
       document.getElementById('version').textContent = 'v' + d.version;
+    });
+    document.getElementById('newsession-name').addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); submitNewSession(); }
     });
   });
 
@@ -712,10 +852,9 @@
         <span class="status-badge status-loading" id="badge-${project.name}">…</span>
       </div>
       ${project.has_git ? (project.git_diff_stat ? `<div class="git-diff-stat" onclick="showDiff('${project.name}')">~ ${escHtml(project.git_diff_stat)}</div>` : '<div class="git-synced">✓ no local changes</div>') : ''}
-      <div class="rc-url-row" id="url-${project.name}"></div>
+      <div class="running-sessions" id="running-${project.name}"></div>
       <div class="action-row" id="actions-${project.name}">
-        <button class="btn-connect" onclick="connectSession('${project.name}')" id="btn-connect-${project.name}">⚡ Connect</button>
-        <button class="btn-kill"    onclick="killSession('${project.name}')"    id="btn-kill-${project.name}" disabled>💣 Kill</button>
+        <button class="btn-connect" onclick="openNewSession('${project.name}')" id="btn-connect-${project.name}">⚡ Connect</button>
         ${project.has_git ? `<button class="btn-pull" style="margin-left:auto" onclick="gitPull(this,'${project.name}')" id="btn-pull-${project.name}">Pull ⬇</button>` : ''}
       </div>
       ${project.has_git ? `
@@ -738,43 +877,61 @@
     return card;
   }
 
-  // ── Session actions ────────────────────────────────────────────────────
-  async function connectSession(name) {
-    const state = sessionState[name];
-    if (state && state.status === 'running' && state.rc_url) {
-      window.open(state.rc_url, '_blank', 'noopener');
-      return;
-    }
-    const btn = document.getElementById(`btn-connect-${name}`);
+  // ── New session modal ──────────────────────────────────────────────────
+  let _newSessionProject = null;
+
+  function openNewSession(name) {
+    _newSessionProject = name;
+    document.getElementById('newsession-title').textContent = `New session — ${name}`;
+    document.getElementById('newsession-name').value = '';
+    document.getElementById('newsession-overlay').classList.add('open');
+    document.body.style.overflow = 'hidden';
+    setTimeout(() => document.getElementById('newsession-name').focus(), 50);
+  }
+
+  function closeNewSession(e) {
+    if (e && e.target !== document.getElementById('newsession-overlay')) return;
+    document.getElementById('newsession-overlay').classList.remove('open');
+    document.body.style.overflow = '';
+    _newSessionProject = null;
+  }
+
+  async function submitNewSession() {
+    const sessionName = document.getElementById('newsession-name').value.trim();
+    if (!sessionName) { document.getElementById('newsession-name').focus(); return; }
+    const project = _newSessionProject;
     const yolo = document.getElementById('yolo-global')?.checked ?? false;
+    closeNewSession();
+
+    const btn = document.getElementById(`btn-connect-${project}`);
     if (btn) { btn.disabled = true; btn.textContent = 'Starting…'; }
     try {
-      const res = await fetch(`/api/sessions/${encodeURIComponent(name)}`, {
+      const res = await fetch(`/api/sessions/${encodeURIComponent(project)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ yolo }),
+        body: JSON.stringify({ name: sessionName, yolo }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      applyState(name, data);
       if (data.rc_url) window.open(data.rc_url, '_blank', 'noopener');
+      await refreshStatus(project);
+      await loadHistory(project);
     } catch (err) {
       showError('Failed to start session: ' + err.message);
+    } finally {
       if (btn) { btn.disabled = false; btn.textContent = '⚡ Connect'; }
     }
   }
 
-  async function killSession(name) {
-    setBusy(name, true);
+  // ── Session actions ────────────────────────────────────────────────────
+  async function killSession(project, sessionId) {
     try {
-      const res = await fetch(`/api/sessions/${encodeURIComponent(name)}`, { method: 'DELETE' });
+      const res = await fetch(`/api/sessions/${encodeURIComponent(project)}/${sessionId}`, { method: 'DELETE' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      applyState(name, await res.json());
-      // Refresh history after kill so the new stopped record appears
-      await loadHistory(name);
+      await refreshStatus(project);
+      await loadHistory(project);
     } catch (err) {
       showError('Failed to kill session: ' + err.message);
-      setBusy(name, false);
     }
   }
 
@@ -782,8 +939,40 @@
     try {
       const res = await fetch(`/api/sessions/${encodeURIComponent(name)}`);
       if (!res.ok) return;
-      applyState(name, await res.json());
+      const { sessions } = await res.json();
+      sessionState[name] = sessions;
+      renderRunningSessions(name, sessions);
+      updateCardBadge(name, sessions);
     } catch (_) { /* silent */ }
+  }
+
+  function renderRunningSessions(name, sessions) {
+    const container = document.getElementById(`running-${name}`);
+    if (!container) return;
+    if (!sessions || sessions.length === 0) { container.innerHTML = ''; return; }
+    container.innerHTML = sessions.map(s => `
+      <div class="session-row">
+        <span class="session-label">${escHtml(s.name || 'unnamed')}</span>
+        ${s.rc_url ? `<a href="${escHtml(s.rc_url)}" target="_blank" rel="noopener" class="btn-open-session">Open ↗</a>` : ''}
+        <button class="btn-kill-session" onclick="killSession('${escHtml(name)}', ${s.id})">💣 Kill</button>
+      </div>
+    `).join('');
+  }
+
+  function updateCardBadge(name, sessions) {
+    const badge = document.getElementById(`badge-${name}`);
+    if (!badge) return;
+    const count = (sessions || []).length;
+    if (count === 0) {
+      badge.textContent = 'stopped';
+      badge.className = 'status-badge status-stopped';
+    } else if (count === 1) {
+      badge.textContent = 'running';
+      badge.className = 'status-badge status-running';
+    } else {
+      badge.textContent = `${count} running`;
+      badge.className = 'status-badge status-running';
+    }
   }
 
   // ── History ────────────────────────────────────────────────────────────
@@ -849,7 +1038,6 @@
       btn.addEventListener('click', () => showSnapshot(btn.dataset.project, +btn.dataset.sessionId, btn.dataset.label));
     });
 
-    updateResumeButton(name);
   }
 
   function startRename(projectName, sessionId, currentName) {
@@ -1070,8 +1258,6 @@
     toggle.textContent = (open ? '▾' : '▸') + ` History (${count})`;
   }
 
-  function updateResumeButton(_name) { /* no-op: Connect handles start+resume */ }
-
   async function clearHistory(name) {
     if (!confirm(`Clear all stopped sessions for "${name}"?`)) return;
     try {
@@ -1084,48 +1270,6 @@
   }
 
   // ── UI helpers ─────────────────────────────────────────────────────────
-  function applyState(name, data) {
-    sessionState[name] = data;
-
-    const badge      = document.getElementById(`badge-${name}`);
-    const urlRow     = document.getElementById(`url-${name}`);
-    const btnConnect = document.getElementById(`btn-connect-${name}`);
-    const btnKill    = document.getElementById(`btn-kill-${name}`);
-    if (!badge) return;
-
-    const status = data.status || 'stopped';
-    badge.textContent = status;
-    badge.className = `status-badge status-${status}`;
-
-    if (data.rc_url) {
-      urlRow.innerHTML = `RC: <a href="${escHtml(data.rc_url)}" target="_blank" rel="noopener">${escHtml(data.rc_url)}</a>`;
-    } else {
-      urlRow.innerHTML = '';
-    }
-
-    const running = status === 'running';
-    if (btnConnect) { btnConnect.disabled = false; btnConnect.textContent = '⚡ Connect'; }
-    if (btnKill)    { btnKill.disabled = !running; }
-
-    const btnCommit = document.getElementById(`btn-commit-${name}`);
-    if (btnCommit)  { btnCommit.style.display = 'inline-block'; }
-
-    updateResumeButton(name);
-  }
-
-  function setBusy(name, busy) {
-    const btnConnect = document.getElementById(`btn-connect-${name}`);
-    const btnKill    = document.getElementById(`btn-kill-${name}`);
-    if (!btnConnect) return;
-    if (busy) {
-      btnConnect.disabled = true;
-      if (btnKill) btnKill.disabled = true;
-    } else {
-      const state = sessionState[name];
-      if (state) applyState(name, state);
-    }
-  }
-
   function showError(msg) {
     const banner = document.getElementById('error-banner');
     if (msg) { banner.textContent = msg; banner.style.display = 'block'; }
@@ -1181,7 +1325,7 @@
   }
 
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') { closeDiff(); closeSnapshot(); closeSend(); closePRReview(); }
+    if (e.key === 'Escape') { closeDiff(); closeSnapshot(); closeSend(); closePRReview(); closeNewSession(); }
   });
 
   function colorDiff(text) {

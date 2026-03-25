@@ -4,11 +4,10 @@ claude-pilot FastAPI application.
 Routes (all sync — FastAPI runs them in a thread pool):
   GET    /                                  → serve index.html
   GET    /api/projects                      → list projects
-  POST   /api/sessions/{project}            → start session, return {url, status}
-  GET    /api/sessions/{project}            → get session status + RC URL if running
-  DELETE /api/sessions/{project}            → kill session
+  POST   /api/sessions/{project}            → start new session, return {status, rc_url, session_id, name}
+  GET    /api/sessions/{project}            → list running sessions [{id, name, rc_url, status}]
+  DELETE /api/sessions/{project}/{id}       → kill a specific session by id
   GET    /api/sessions/{project}/history    → list past sessions for project
-  POST   /api/sessions/{project}/resume     → re-launch a stopped session (Phase 2: +context)
   GET    /api/logs?since=<cursor>           → recent log lines for browser console forwarding
   GET    /api/sessions/{project}/history/{session_id}/snapshot → pane snapshot
   PATCH  /api/sessions/{project}/history/{session_id}          → rename session
@@ -219,12 +218,14 @@ def _get_project_path(project: str) -> str:
 @app.post("/api/sessions/{project}")
 def start_session(
     project: str,
+    name: str = Body(..., embed=True),
     yolo: bool = Body(False, embed=True),
 ) -> dict:
     path = _get_project_path(project)
     return session_mgr.start_session(
         project=project,
         project_path=path,
+        name=name,
         prefix=_config.tmux_session_prefix,
         db_path=str(_config.db_path),
         spawn_mode=_config.spawn_mode,
@@ -287,53 +288,35 @@ def send_to_session(
     project: str,
     text: str = Body(..., embed=True),
 ) -> dict:
-    """Send text to the active RC session via tmux send-keys."""
+    """Send text to the most recently started active RC session via tmux send-keys."""
     _get_project_path(project)  # 404 if unknown project
     text = text.strip()
     if not text:
         raise HTTPException(status_code=422, detail="text must not be empty")
-    sent = session_mgr.send_keys(project, _config.tmux_session_prefix, text)
+    sent = session_mgr.send_keys(project, _config.tmux_session_prefix, str(_config.db_path), text)
     if not sent:
         raise HTTPException(status_code=409, detail="No active session for this project")
     return {"ok": True}
 
 
-@app.post("/api/sessions/{project}/resume")
-def resume_session(
-    project: str,
-    yolo: bool = Body(False, embed=True),
-) -> dict:
-    """
-    Re-launch a session for *project*.
-    Phase 1: identical to start — just restarts RC.
-    Phase 2 will inject last-session context here.
-    """
-    path = _get_project_path(project)
-    logger.info("resume requested for project={} yolo={}", project, yolo)
-    return session_mgr.start_session(
-        project=project,
-        project_path=path,
-        prefix=_config.tmux_session_prefix,
-        db_path=str(_config.db_path),
-        spawn_mode=_config.spawn_mode,
-        yolo=yolo,
-    )
-
-
 @app.get("/api/sessions/{project}")
-def get_session(project: str) -> dict:
-    return session_mgr.get_session_status(
+def get_sessions(project: str) -> dict:
+    """Return all live running sessions for *project*."""
+    _get_project_path(project)  # 404 if unknown project
+    sessions = session_mgr.list_running_sessions(
         project=project,
         prefix=_config.tmux_session_prefix,
         db_path=str(_config.db_path),
     )
+    return {"sessions": sessions}
 
 
-@app.delete("/api/sessions/{project}")
-def delete_session(project: str) -> dict:
+@app.delete("/api/sessions/{project}/{session_id}")
+def delete_session(project: str, session_id: int) -> dict:
+    """Kill a specific session by ID."""
+    _get_project_path(project)  # 404 if unknown project
     return session_mgr.kill_session(
-        project=project,
-        prefix=_config.tmux_session_prefix,
+        session_id=session_id,
         db_path=str(_config.db_path),
     )
 

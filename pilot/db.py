@@ -23,13 +23,14 @@ import aiosqlite
 
 CREATE_SESSIONS_TABLE = """
 CREATE TABLE IF NOT EXISTS sessions (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    project     TEXT    NOT NULL,
-    name        TEXT,              -- auto-set to ISO date at creation
-    started_at  TEXT    NOT NULL,  -- ISO-8601 UTC
-    ended_at    TEXT,              -- NULL while still running
-    status      TEXT    NOT NULL DEFAULT 'running',
-    rc_url      TEXT               -- captured Remote-Control URL
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    project       TEXT    NOT NULL,
+    name          TEXT,
+    tmux_session  TEXT,              -- unique tmux session name for this instance
+    started_at    TEXT    NOT NULL,  -- ISO-8601 UTC
+    ended_at      TEXT,              -- NULL while still running
+    status        TEXT    NOT NULL DEFAULT 'running',
+    rc_url        TEXT               -- captured Remote-Control URL
 )
 """
 
@@ -53,6 +54,11 @@ async def init_db(db_path: str) -> None:
     async with aiosqlite.connect(db_path) as db:
         await db.execute(CREATE_SESSIONS_TABLE)
         await db.execute(CREATE_SESSION_LOGS_TABLE)
+        # Migration: add tmux_session column to existing databases
+        cols = await db.execute("PRAGMA table_info(sessions)")
+        col_names = [row[1] for row in await cols.fetchall()]
+        if "tmux_session" not in col_names:
+            await db.execute("ALTER TABLE sessions ADD COLUMN tmux_session TEXT")
         await db.commit()
 
 
@@ -70,14 +76,19 @@ def _connect(db_path: str) -> sqlite3.Connection:
     return conn
 
 
-def create_session(db_path: str, project: str, rc_url: str | None) -> int:
+def create_session(
+    db_path: str,
+    project: str,
+    name: str,
+    tmux_session: str,
+    rc_url: str | None,
+) -> int:
     """Insert a new running session row; return its id."""
-    name = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     with _connect(db_path) as conn:
         cur = conn.execute(
-            "INSERT INTO sessions (project, name, started_at, status, rc_url) "
-            "VALUES (?, ?, ?, 'running', ?)",
-            (project, name, _now(), rc_url),
+            "INSERT INTO sessions (project, name, tmux_session, started_at, status, rc_url) "
+            "VALUES (?, ?, ?, ?, 'running', ?)",
+            (project, name, tmux_session, _now(), rc_url),
         )
         conn.commit()
         return cur.lastrowid  # type: ignore[return-value]
@@ -110,15 +121,24 @@ def mark_session_stopped(db_path: str, session_id: int) -> None:
     end_session(db_path, session_id, status="stopped")
 
 
-def get_running_session(db_path: str, project: str) -> dict[str, Any] | None:
-    """Return the most recent running session row for *project*, or None."""
+def get_session_by_id(db_path: str, session_id: int) -> dict[str, Any] | None:
+    """Return a single session row by ID, or None."""
     with _connect(db_path) as conn:
         row = conn.execute(
-            "SELECT * FROM sessions WHERE project = ? AND status = 'running' "
-            "ORDER BY started_at DESC LIMIT 1",
-            (project,),
+            "SELECT * FROM sessions WHERE id = ?", (session_id,)
         ).fetchone()
     return dict(row) if row else None
+
+
+def list_running_sessions(db_path: str, project: str) -> list[dict[str, Any]]:
+    """Return all running session rows for *project*, newest first."""
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            "SELECT * FROM sessions WHERE project = ? AND status = 'running' "
+            "ORDER BY started_at DESC",
+            (project,),
+        ).fetchall()
+    return [dict(r) for r in rows]
 
 
 def get_all_running_sessions(db_path: str) -> list[dict[str, Any]]:

@@ -1,14 +1,14 @@
 """
 Session management — spawn / kill / query claude remote-control inside tmux.
 
-Each project maps to exactly one named tmux session: ``{prefix}{project_name}``.
-The RC URL is captured by tailing the tmux pane's output looking for the
-characteristic "https://..." line that claude remote-control prints on startup.
+Each session gets its own uniquely named tmux session: ``{prefix}{project}-{hex}``,
+allowing multiple concurrent sessions per project.
 Session state is persisted to SQLite via pilot.db so it survives server restarts.
 """
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 import time
@@ -61,27 +61,22 @@ def _capture_pane(session_name: str) -> str:
 def start_session(
     project: str,
     project_path: str,
+    name: str,
     prefix: str,
     db_path: str,
     spawn_mode: str = "same-dir",
     yolo: bool = False,
 ) -> dict[str, Any]:
     """
-    Spawn ``claude remote-control`` for *project* inside a new (or reused)
-    tmux session.  Blocks for up to _URL_WAIT_SECONDS waiting for the RC URL.
+    Spawn ``claude remote-control`` for *project* inside a new tmux session.
+    Each call always creates a fresh session, allowing multiple concurrent sessions.
+    Blocks for up to _URL_WAIT_SECONDS waiting for the RC URL.
 
-    Returns a dict with keys: ``status``, ``rc_url`` (str | None), ``session_id`` (int | None).
+    Returns a dict with keys: ``status``, ``rc_url`` (str | None), ``session_id`` (int | None), ``name`` (str).
     """
-    session_name = _tmux_session_name(prefix, project)
-    logger.info("start_session: project={} session={}", project, session_name)
-
-    # If a tmux session is already running, return its DB record rather than re-spawning
-    if _session_exists(session_name):
-        record = db.get_running_session(db_path, project)
-        url = (record or {}).get("rc_url")
-        sid = (record or {}).get("id")
-        logger.info("session already exists, rc_url={}", url)
-        return {"status": "running", "rc_url": url, "session_id": sid}
+    suffix = os.urandom(3).hex()
+    session_name = f"{_tmux_session_name(prefix, project)}-{suffix}"
+    logger.info("start_session: project={} session={} name={!r}", project, session_name, name)
 
     cmd = f"claude remote-control --spawn={spawn_mode}{' --permission-mode bypassPermissions' if yolo else ''}"
     logger.info("spawning tmux session in {} cmd={!r}", project_path, cmd)
@@ -105,76 +100,78 @@ def start_session(
             _URL_WAIT_SECONDS,
             pane_text.strip() or "(empty)",
         )
-        sid = db.create_session(db_path, project, None)
+        sid = db.create_session(db_path, project, name, session_name, None)
         db.end_session(db_path, sid, "timed_out", pane_text)
-        return {"status": "timed_out", "rc_url": None, "session_id": sid}
+        return {"status": "timed_out", "rc_url": None, "session_id": sid, "name": name}
 
     logger.info("RC URL captured: {}", url)
-    sid = db.create_session(db_path, project, url)
-    return {"status": "running", "rc_url": url, "session_id": sid}
+    sid = db.create_session(db_path, project, name, session_name, url)
+    return {"status": "running", "rc_url": url, "session_id": sid, "name": name}
 
 
-def get_session_status(project: str, prefix: str, db_path: str) -> dict[str, Any]:
+def list_running_sessions(project: str, prefix: str, db_path: str) -> list[dict[str, Any]]:
     """
-    Return current status and RC URL for *project*.
-    Does NOT start a new session.
+    Return all live running sessions for *project*.
+    Cross-checks DB records against actual tmux session existence;
+    stale records (tmux gone) are marked stopped automatically.
     """
-    session_name = _tmux_session_name(prefix, project)
+    records = db.list_running_sessions(db_path, project)
+    result = []
+    for record in records:
+        tmux_name = record.get("tmux_session") or _tmux_session_name(prefix, project)
+        if _session_exists(tmux_name):
+            result.append({
+                "id": record["id"],
+                "name": record["name"] or "",
+                "rc_url": record["rc_url"],
+                "status": "running",
+            })
+        else:
+            logger.debug("stale running record {} — tmux session gone, marking stopped", record["id"])
+            db.mark_session_stopped(db_path, record["id"])
+    return result
 
-    if not _session_exists(session_name):
-        return {"status": "stopped", "rc_url": None, "session_id": None}
 
-    # tmux session is alive — get URL from DB record (survives pane scroll)
-    record = db.get_running_session(db_path, project)
-    url = (record or {}).get("rc_url")
-    sid = (record or {}).get("id")
-    logger.debug("get_session_status: project={} url={}", project, url)
-    return {"status": "running", "rc_url": url, "session_id": sid}
-
-
-def send_keys(project: str, prefix: str, text: str) -> bool:
-    """Send *text* to the active tmux session as if the user typed it.
-
-    Returns True if the session exists and keys were sent, False otherwise.
+def kill_session(session_id: int, db_path: str) -> dict[str, Any]:
     """
-    session_name = _tmux_session_name(prefix, project)
-    if not _session_exists(session_name):
-        return False
-    subprocess.run(
-        ["tmux", "send-keys", "-t", session_name, text, "Enter"],
-        check=True,
-    )
-    logger.info("send_keys: project={} text={!r}", project, text[:80])
-    return True
-
-
-def kill_session(project: str, prefix: str, db_path: str) -> dict[str, Any]:
-    """
-    Kill the tmux session for *project*.
+    Kill the tmux session for a specific session ID.
     Captures a pane snapshot before killing and stores it in session_logs.
     """
-    session_name = _tmux_session_name(prefix, project)
-    logger.info("kill_session: project={} session={}", project, session_name)
+    record = db.get_session_by_id(db_path, session_id)
+    if not record:
+        logger.warning("kill_session: session {} not found in DB", session_id)
+        return {"status": "stopped"}
 
-    if _session_exists(session_name):
-        # Capture pane output before the session dies
-        snapshot = _capture_pane(session_name)
-        subprocess.run(
-            ["tmux", "kill-session", "-t", session_name],
-            check=True,
-        )
-        logger.info("tmux session killed")
+    tmux_name = record.get("tmux_session")
+    logger.info("kill_session: id={} tmux={}", session_id, tmux_name)
 
-        record = db.get_running_session(db_path, project)
-        if record:
-            db.end_session(db_path, record["id"], "stopped", snapshot)
+    if tmux_name and _session_exists(tmux_name):
+        snapshot = _capture_pane(tmux_name)
+        subprocess.run(["tmux", "kill-session", "-t", tmux_name], check=True)
+        logger.info("tmux session {} killed", tmux_name)
+        db.end_session(db_path, session_id, "stopped", snapshot)
     else:
-        logger.info("no tmux session to kill; checking DB for stale running record")
-        record = db.get_running_session(db_path, project)
-        if record:
-            db.mark_session_stopped(db_path, record["id"])
+        db.mark_session_stopped(db_path, session_id)
 
-    return {"status": "stopped", "rc_url": None, "session_id": None}
+    return {"status": "stopped"}
+
+
+def send_keys(project: str, prefix: str, db_path: str, text: str) -> bool:
+    """Send *text* to the most recently started active tmux session for *project*.
+
+    Returns True if keys were sent, False if no active session found.
+    """
+    records = db.list_running_sessions(db_path, project)
+    for record in records:
+        tmux_name = record.get("tmux_session") or _tmux_session_name(prefix, project)
+        if _session_exists(tmux_name):
+            subprocess.run(
+                ["tmux", "send-keys", "-t", tmux_name, text, "Enter"],
+                check=True,
+            )
+            logger.info("send_keys: project={} tmux={} text={!r}", project, tmux_name, text[:80])
+            return True
+    return False
 
 
 # ---------------------------------------------------------------------------
