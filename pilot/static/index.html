@@ -141,6 +141,9 @@
     button:not(:disabled):hover { opacity: .85; }
 
     .btn-connect   { background: var(--accent); color: #fff; }
+    .yolo-label    { display: flex; align-items: center; gap: .35rem; font-size: .78rem; color: var(--muted); cursor: pointer; user-select: none; }
+    .yolo-label input[type=checkbox] { accent-color: var(--red); cursor: pointer; }
+    .yolo-label:has(input:checked) { color: var(--red); }
     .btn-kill      { background: none; color: var(--muted); border: 1px solid var(--border); font-weight: normal; }
     .btn-kill:not(:disabled):hover { border-color: var(--red); color: var(--red); opacity: 1; }
     .btn-pull      { background: none; color: var(--muted); border: 1px solid var(--border); font-weight: normal; }
@@ -618,7 +621,8 @@
       <div class="rc-url-row" id="url-${project.name}"></div>
       <div class="action-row" id="actions-${project.name}">
         <button class="btn-connect" onclick="connectSession('${project.name}')" id="btn-connect-${project.name}">Connect</button>
-        <button class="btn-kill"    onclick="killSession('${project.name}')"    id="btn-kill-${project.name}" disabled style="display:none">Kill</button>
+        <button class="btn-kill"    onclick="killSession('${project.name}')"    id="btn-kill-${project.name}" disabled>Kill</button>
+        <label class="yolo-label"><input type="checkbox" id="yolo-${project.name}"> YOLO</label>
         ${project.has_git ? `<button class="btn-pull" onclick="gitPull(this,'${project.name}')" id="btn-pull-${project.name}">↓ Pull</button>` : ''}
         ${project.has_git ? `<button class="btn-commit" onclick="openCommitSend('${project.name}')" id="btn-commit-${project.name}">↑ Commit & Push</button>` : ''}
       </div>
@@ -645,9 +649,14 @@
       return;
     }
     const btn = document.getElementById(`btn-connect-${name}`);
+    const yolo = document.getElementById(`yolo-${name}`)?.checked ?? false;
     if (btn) { btn.disabled = true; btn.textContent = 'Starting…'; }
     try {
-      const res = await fetch(`/api/sessions/${encodeURIComponent(name)}`, { method: 'POST' });
+      const res = await fetch(`/api/sessions/${encodeURIComponent(name)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ yolo }),
+      });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       applyState(name, data);

@@ -64,6 +64,7 @@ def start_session(
     prefix: str,
     db_path: str,
     spawn_mode: str = "same-dir",
+    yolo: bool = False,
 ) -> dict[str, Any]:
     """
     Spawn ``claude remote-control`` for *project* inside a new (or reused)
@@ -89,7 +90,7 @@ def start_session(
             "-d",               # detached
             "-s", session_name,
             "-c", project_path, # starting directory
-            f"claude remote-control --spawn={spawn_mode}",
+            f"claude remote-control --spawn={spawn_mode}" + (" --dangerously-skip-permissions" if yolo else ""),
         ],
         check=True,
     )

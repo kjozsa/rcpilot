@@ -156,7 +156,10 @@ def _get_project_path(project: str) -> str:
 
 
 @app.post("/api/sessions/{project}")
-def start_session(project: str) -> dict:
+def start_session(
+    project: str,
+    yolo: bool = Body(False, embed=True),
+) -> dict:
     path = _get_project_path(project)
     return session_mgr.start_session(
         project=project,
@@ -164,6 +167,7 @@ def start_session(project: str) -> dict:
         prefix=_config.tmux_session_prefix,
         db_path=str(_config.db_path),
         spawn_mode=_config.spawn_mode,
+        yolo=yolo,
     )
 
 
@@ -234,20 +238,24 @@ def send_to_session(
 
 
 @app.post("/api/sessions/{project}/resume")
-def resume_session(project: str) -> dict:
+def resume_session(
+    project: str,
+    yolo: bool = Body(False, embed=True),
+) -> dict:
     """
     Re-launch a session for *project*.
     Phase 1: identical to start — just restarts RC.
     Phase 2 will inject last-session context here.
     """
     path = _get_project_path(project)
-    logger.info("resume requested for project={}", project)
+    logger.info("resume requested for project={} yolo={}", project, yolo)
     return session_mgr.start_session(
         project=project,
         project_path=path,
         prefix=_config.tmux_session_prefix,
         db_path=str(_config.db_path),
         spawn_mode=_config.spawn_mode,
+        yolo=yolo,
     )
 
 
