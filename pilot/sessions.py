@@ -90,7 +90,7 @@ def start_session(
             "-d",               # detached
             "-s", session_name,
             "-c", project_path, # starting directory
-            f"claude remote-control --spawn={spawn_mode}" + (" --dangerously-skip-permissions" if yolo else ""),
+            f"claude{' --dangerously-skip-permissions' if yolo else ''} remote-control --spawn={spawn_mode}",
         ],
         check=True,
     )
