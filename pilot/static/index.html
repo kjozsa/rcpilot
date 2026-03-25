@@ -145,7 +145,8 @@
     .yolo-label input[type=checkbox] { accent-color: var(--red); cursor: pointer; }
     .yolo-label:has(input:checked) { color: var(--red); }
     .btn-kill      { background: none; color: var(--muted); border: 1px solid var(--border); font-weight: normal; }
-    .btn-kill:not(:disabled):hover { border-color: var(--red); color: var(--red); opacity: 1; }
+    .btn-kill:not(:disabled) { border-color: var(--red); color: var(--red); }
+    .btn-kill:not(:disabled):hover { opacity: .75; }
     .btn-pull      { background: none; color: var(--muted); border: 1px solid var(--border); font-weight: normal; }
     .btn-pull:hover { border-color: var(--green); color: var(--green); opacity: 1; }
     .btn-pull.ok   { border-color: var(--green); color: var(--green); }
