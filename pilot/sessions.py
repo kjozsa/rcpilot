@@ -83,14 +83,15 @@ def start_session(
         logger.info("session already exists, rc_url={}", url)
         return {"status": "running", "rc_url": url, "session_id": sid}
 
-    logger.info("spawning tmux session in {}", project_path)
+    cmd = f"claude remote-control --spawn={spawn_mode}{' --permission-mode bypassPermissions' if yolo else ''}"
+    logger.info("spawning tmux session in {} cmd={!r}", project_path, cmd)
     subprocess.run(
         [
             "tmux", "new-session",
             "-d",               # detached
             "-s", session_name,
             "-c", project_path, # starting directory
-            f"claude{' --dangerously-skip-permissions' if yolo else ''} remote-control --spawn={spawn_mode}",
+            cmd,
         ],
         check=True,
     )
