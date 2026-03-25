@@ -714,14 +714,14 @@
       ${project.has_git ? (project.git_diff_stat ? `<div class="git-diff-stat" onclick="showDiff('${project.name}')">~ ${escHtml(project.git_diff_stat)}</div>` : '<div class="git-synced">✓ no local changes</div>') : ''}
       <div class="rc-url-row" id="url-${project.name}"></div>
       <div class="action-row" id="actions-${project.name}">
-        <button class="btn-connect" onclick="connectSession('${project.name}')" id="btn-connect-${project.name}">Connect</button>
-        <button class="btn-kill"    onclick="killSession('${project.name}')"    id="btn-kill-${project.name}" disabled>Kill</button>
-        ${project.has_git ? `<button class="btn-pull" style="margin-left:auto" onclick="gitPull(this,'${project.name}')" id="btn-pull-${project.name}">↓ Pull</button>` : ''}
+        <button class="btn-connect" onclick="connectSession('${project.name}')" id="btn-connect-${project.name}">⚡ Connect</button>
+        <button class="btn-kill"    onclick="killSession('${project.name}')"    id="btn-kill-${project.name}" disabled>💣 Kill</button>
+        ${project.has_git ? `<button class="btn-pull" style="margin-left:auto" onclick="gitPull(this,'${project.name}')" id="btn-pull-${project.name}">Pull ⬇</button>` : ''}
       </div>
       ${project.has_git ? `
       <div class="git-row">
-        <input type="number" class="pr-input" placeholder="PR #" min="1" id="pr-input-${project.name}"><button class="btn-review-pr" onclick="openPRReview('${project.name}')">Review PR</button>
-        <button class="btn-commit" style="margin-left:auto" onclick="openCommitSend('${project.name}')" id="btn-commit-${project.name}">↑ Commit & Push</button>
+        <input type="number" class="pr-input" placeholder="PR #" min="1" id="pr-input-${project.name}"><button class="btn-review-pr" onclick="openPRReview('${project.name}')">🔍 Review PR</button>
+        <button class="btn-commit" style="margin-left:auto" onclick="openCommitSend('${project.name}')" id="btn-commit-${project.name}">Push ⬆</button>
       </div>` : ''}
       <div class="history-header">
         <button class="history-toggle" id="hist-toggle-${project.name}"
@@ -760,7 +760,7 @@
       if (data.rc_url) window.open(data.rc_url, '_blank', 'noopener');
     } catch (err) {
       showError('Failed to start session: ' + err.message);
-      if (btn) { btn.disabled = false; btn.textContent = 'Connect'; }
+      if (btn) { btn.disabled = false; btn.textContent = '⚡ Connect'; }
     }
   }
 
@@ -1104,7 +1104,7 @@
     }
 
     const running = status === 'running';
-    if (btnConnect) { btnConnect.disabled = false; btnConnect.textContent = 'Connect'; }
+    if (btnConnect) { btnConnect.disabled = false; btnConnect.textContent = '⚡ Connect'; }
     if (btnKill)    { btnKill.disabled = !running; }
 
     const btnCommit = document.getElementById(`btn-commit-${name}`);
@@ -1154,7 +1154,7 @@
       showError('git pull failed: ' + err.message);
     } finally {
       btn.disabled = false;
-      setTimeout(() => { btn.textContent = '↓ Pull'; btn.classList.remove('ok', 'err'); }, 3000);
+      setTimeout(() => { btn.textContent = 'Pull ⬇'; btn.classList.remove('ok', 'err'); }, 3000);
     }
   }
 
