@@ -510,6 +510,81 @@
       margin: 0;
       color: var(--text);
     }
+
+    /* ── PR Review ───────────────────────────────────────────────────── */
+    .pr-input {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: .4rem .5rem;
+      font-size: .82rem;
+      width: 70px;
+      -moz-appearance: textfield;
+    }
+    .pr-input::-webkit-outer-spin-button,
+    .pr-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    .pr-input:focus { outline: none; border-color: var(--accent); }
+
+    .btn-review-pr { background: none; color: var(--muted); border: 1px solid var(--border); font-weight: normal; }
+    .btn-review-pr:not(:disabled):hover { border-color: var(--accent); color: var(--accent); opacity: 1; }
+
+    #pr-review-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.6);
+      z-index: 100;
+      align-items: flex-end;
+    }
+    #pr-review-overlay.open { display: flex; }
+
+    #pr-review-sheet {
+      background: var(--surface2);
+      border-top: 1px solid var(--border);
+      border-radius: var(--radius) var(--radius) 0 0;
+      width: 100%;
+      max-height: 85vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    #pr-review-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: .6rem 1rem;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    #pr-review-title { font-size: .9rem; font-weight: 600; color: var(--text); }
+    #pr-review-close {
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 1.3rem;
+      line-height: 1;
+      padding: .2rem .5rem;
+      cursor: pointer;
+    }
+    #pr-review-close:hover { color: var(--text); opacity: 1; }
+
+    #pr-review-body {
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: .75rem 1rem;
+      flex: 1;
+    }
+
+    #pr-review-body pre {
+      font-family: inherit;
+      font-size: .85rem;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-word;
+      margin: 0;
+      color: var(--text);
+    }
   </style>
 </head>
 <body>
@@ -564,6 +639,15 @@
       <button id="snapshot-close" onclick="closeSnapshot()">✕</button>
     </div>
     <div id="snapshot-body"><pre id="snapshot-pre"></pre></div>
+  </div>
+</div>
+<div id="pr-review-overlay" onclick="closePRReview(event)">
+  <div id="pr-review-sheet">
+    <div id="pr-review-header">
+      <span id="pr-review-title">PR Review</span>
+      <button id="pr-review-close" onclick="closePRReview()">✕</button>
+    </div>
+    <div id="pr-review-body"><pre id="pr-review-pre"></pre></div>
   </div>
 </div>
 <div id="empty-state">No projects found.<br>Check your <code>projects_dir</code> in config.</div>
@@ -628,6 +712,7 @@
         <button class="btn-kill"    onclick="killSession('${project.name}')"    id="btn-kill-${project.name}" disabled>Kill</button>
         ${project.has_git ? `<button class="btn-pull" onclick="gitPull(this,'${project.name}')" id="btn-pull-${project.name}">↓ Pull</button>` : ''}
         ${project.has_git ? `<button class="btn-commit" onclick="openCommitSend('${project.name}')" id="btn-commit-${project.name}">↑ Commit & Push</button>` : ''}
+        ${project.has_git ? `<input type="number" class="pr-input" placeholder="PR #" min="1" id="pr-input-${project.name}"><button class="btn-review-pr" onclick="openPRReview('${project.name}')">Review PR</button>` : ''}
       </div>
       <div class="history-header">
         <button class="history-toggle" id="hist-toggle-${project.name}"
@@ -929,6 +1014,44 @@
     _sendProject = null;
   }
 
+  // ── PR Review ──────────────────────────────────────────────────────────
+  async function openPRReview(name) {
+    const input = document.getElementById(`pr-input-${name}`);
+    const prNumber = parseInt(input.value, 10);
+    if (!prNumber || prNumber < 1) { input.focus(); return; }
+
+    const pre = document.getElementById('pr-review-pre');
+    document.getElementById('pr-review-title').textContent = `PR #${prNumber} — ${name}`;
+    pre.style.color = '';
+    pre.textContent = 'Fetching PR and running review…';
+    document.getElementById('pr-review-overlay').classList.add('open');
+    document.body.style.overflow = 'hidden';
+
+    try {
+      const res = await fetch(`/api/projects/${encodeURIComponent(name)}/review-pr`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pr_number: prNumber }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `HTTP ${res.status}`);
+      }
+      const { review, error, returncode } = await res.json();
+      if (returncode !== 0) throw new Error(error || review || 'claude exited with an error');
+      pre.textContent = review || '(no review returned)';
+    } catch (err) {
+      pre.style.color = 'var(--red)';
+      pre.textContent = `Error: ${err.message}`;
+    }
+  }
+
+  function closePRReview(e) {
+    if (e && e.target !== document.getElementById('pr-review-overlay')) return;
+    document.getElementById('pr-review-overlay').classList.remove('open');
+    document.body.style.overflow = '';
+  }
+
   function toggleHistory(name) {
     const container = document.getElementById(`history-${name}`);
     const toggle = document.getElementById(`hist-toggle-${name}`);
@@ -1049,7 +1172,7 @@
   }
 
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') { closeDiff(); closeSnapshot(); closeSend(); }
+    if (e.key === 'Escape') { closeDiff(); closeSnapshot(); closeSend(); closePRReview(); }
   });
 
   function colorDiff(text) {

@@ -15,6 +15,7 @@ Routes (all sync — FastAPI runs them in a thread pool):
   DELETE /api/sessions/{project}/history                       → clear non-running sessions
   POST   /api/sessions/{project}/send                         → send keys to active tmux session
   POST   /api/projects/{project}/run-claude                   → run claude -p in project dir
+  POST   /api/projects/{project}/review-pr                   → fetch GitHub PR via gh CLI and review with claude -p
 """
 
 from __future__ import annotations
@@ -120,6 +121,66 @@ def run_claude(
     )
     return {
         "output": result.stdout.strip(),
+        "error": result.stderr.strip(),
+        "returncode": result.returncode,
+    }
+
+
+@app.post("/api/projects/{project}/review-pr")
+def review_pr(
+    project: str,
+    pr_number: int = Body(..., embed=True),
+) -> dict:
+    """Fetch a GitHub PR via gh CLI and ask Claude to review it."""
+    import subprocess
+    import json as _json
+    path = _get_project_path(project)
+
+    meta_result = subprocess.run(
+        ["gh", "pr", "view", str(pr_number), "--json", "title,body"],
+        cwd=path,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    if meta_result.returncode != 0:
+        raise HTTPException(
+            status_code=400,
+            detail=meta_result.stderr.strip() or f"PR #{pr_number} not found",
+        )
+
+    meta = _json.loads(meta_result.stdout)
+    title = meta.get("title", "")
+    body = (meta.get("body") or "").strip()
+
+    diff_result = subprocess.run(
+        ["gh", "pr", "diff", str(pr_number)],
+        cwd=path,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    diff = diff_result.stdout
+
+    prompt = (
+        f"Review PR #{pr_number}: {title}\n\n"
+        + (f"Description:\n{body}\n\n" if body else "")
+        + f"Diff:\n{diff}\n\n"
+        + "Provide:\n"
+        + "1. A brief summary of the functional changes\n"
+        + "2. Critical issues and bugs only (skip minor style nits)\n\n"
+        + "Be concise."
+    )
+
+    result = subprocess.run(
+        ["claude", "-p", prompt],
+        cwd=path,
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+    return {
+        "review": result.stdout.strip(),
         "error": result.stderr.strip(),
         "returncode": result.returncode,
     }
