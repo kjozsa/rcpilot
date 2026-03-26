@@ -74,7 +74,7 @@ async def lifespan(app: FastAPI):  # type: ignore[type-arg]
     logger.info("starting watchdog")
     _wd_thread, _wd_stop = start_watchdog(_config)
 
-    logger.info("starting ticker (window_starts={})", _config.window_starts)
+    logger.info("starting ticker (window_cron={!r})", _config.window_cron)
     _tk_thread, _tk_stop = start_ticker(_config)
 
     yield  # server runs here

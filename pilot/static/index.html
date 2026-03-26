@@ -1441,17 +1441,15 @@
     try {
       const data = await fetch('/api/ticker').then(r => r.json());
       const pill = document.getElementById('ticker-pill');
-      if (!data.window_starts || data.window_starts.length === 0) {
+      if (!data.window_cron) {
         pill.style.display = 'none';
         return;
       }
-      const windows = data.window_starts.join(' · ');
-      const next = data.next_window ? `<span class="ticker-next">${data.next_window}</span>` : '';
-      const lastFired = data.last_fired ? ` · fired ${data.last_fired}` : '';
-      pill.innerHTML = `<span class="ticker-dot"></span>⏱ ${windows}${lastFired}${next ? ' → ' + next : ''}`;
-      pill.className = 'ticker-pill' + (data.last_fired ? ' fired' : '');
+      const next = data.next_fire ? data.next_fire.slice(11, 16) : '?';
+      pill.innerHTML = `<span class="ticker-dot"></span>⏱ <code style="font-size:.7rem">${escHtml(data.window_cron)}</code> → <span class="ticker-next">${next}</span>`;
+      pill.className = 'ticker-pill' + (data.last_fired_at ? ' fired' : '');
       pill.style.display = 'flex';
-      pill.title = data.last_fired_at ? `Last fired at ${data.last_fired_at}` : 'No fires yet today';
+      pill.title = data.last_fired_at ? `Last fired at ${data.last_fired_at}` : 'No fires yet this session';
     } catch (_) {}
   }
 

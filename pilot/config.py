@@ -26,10 +26,10 @@ port = 8000
 # SQLite database file path.
 db_path = "~/.config/rcpilot/pilot.db"
 
-# Claude usage window ticker — fires "claude -p hi" at each listed time to start
-# the 5-hour rolling usage window. Times are local HH:MM (24-hour).
-# Example: window_starts = ["07:00", "12:00"]
-window_starts = []
+# Claude usage window scheduler — fires "claude -p hi" on a cron schedule to
+# start the 5-hour rolling usage window (Pro/Max plans). Standard 5-field cron.
+# Example: window_cron = "0 7,12 * * *"   # fire at 07:00 and 12:00 daily
+window_cron = ""
 """
 
 
@@ -45,8 +45,8 @@ class Config:
     port: int = 8000
     # SQLite database file path
     db_path: Path = field(default_factory=lambda: Path.home() / ".config" / "rcpilot" / "pilot.db")
-    # Window ticker: list of "HH:MM" times to fire claude -p to start usage window
-    window_starts: list = field(default_factory=list)
+    # Cron expression for usage window scheduler (empty = disabled)
+    window_cron: str = ""
 
 
 def load_config(path: Path | None = None) -> Config:
@@ -79,7 +79,7 @@ def load_config(path: Path | None = None) -> Config:
         kwargs["port"] = int(raw["port"])
     if "db_path" in raw:
         kwargs["db_path"] = Path(raw["db_path"]).expanduser()
-    if "window_starts" in raw:
-        kwargs["window_starts"] = [str(t) for t in raw["window_starts"]]
+    if "window_cron" in raw:
+        kwargs["window_cron"] = str(raw["window_cron"]).strip()
 
     return Config(**kwargs)

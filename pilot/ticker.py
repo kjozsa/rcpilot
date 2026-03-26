@@ -1,18 +1,23 @@
 """
-Window ticker — fires `claude -p "hi"` at configured times to start the
-5-hour rolling usage window. The clock starts on the first prompt, so a
+Cron-based scheduler — fires `claude -p "hi"` on a cron schedule to start
+the 5-hour rolling usage window. The clock starts on the first prompt, so a
 lightweight no-op prompt is enough.
 
-Each configured time (HH:MM, local) is fired at most once per calendar day.
-The background thread checks every 30 seconds and fires within a ±30-second
-window of the target minute.
+Configure in config.toml:
+  window_cron = "0 7,12 * * *"   # fire at 07:00 and 12:00 every day
+
+Supported cron syntax (5 fields: minute hour dom month dow):
+  *        any value
+  */n      every n steps
+  a,b,c    list of values
+  a-b      inclusive range
 """
 
 from __future__ import annotations
 
 import subprocess
 import threading
-from datetime import date, datetime
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
 from loguru import logger
@@ -22,12 +27,10 @@ if TYPE_CHECKING:
 
 POLL_INTERVAL: float = 30.0  # seconds between checks
 
-# Shared state — read by the /api/ticker endpoint
 _state: dict = {
-    "window_starts": [],
-    "last_fired": None,   # "HH:MM" of most recent fire
+    "window_cron": None,
     "last_fired_at": None,  # ISO datetime string
-    "next_window": None,  # "HH:MM" of next upcoming window today (or tomorrow)
+    "next_fire": None,      # ISO datetime string of next scheduled fire
 }
 _state_lock = threading.Lock()
 
@@ -37,64 +40,100 @@ def get_ticker_state() -> dict:
         return dict(_state)
 
 
+# ---------------------------------------------------------------------------
+# Minimal cron field parser — no dependencies
+# ---------------------------------------------------------------------------
 
-def _parse_times(window_starts: list[str]) -> list[tuple[int, int]]:
-    """Parse ["07:00", "12:00"] → [(7, 0), (12, 0)]."""
-    result = []
-    for t in window_starts:
-        try:
-            h, m = t.strip().split(":")
-            result.append((int(h), int(m)))
-        except Exception:
-            logger.warning("ticker: invalid window_starts entry {!r}, skipping", t)
-    return sorted(result)
+def _expand_field(field: str, lo: int, hi: int) -> set[int]:
+    """Expand a single cron field string into a set of matching integers."""
+    result: set[int] = set()
+    for part in field.split(","):
+        if part == "*":
+            result.update(range(lo, hi + 1))
+        elif part.startswith("*/"):
+            step = int(part[2:])
+            result.update(range(lo, hi + 1, step))
+        elif "-" in part:
+            a, b = part.split("-", 1)
+            result.update(range(int(a), int(b) + 1))
+        else:
+            result.add(int(part))
+    return result
 
 
-def _next_window(times: list[tuple[int, int]], now: datetime) -> str | None:
-    """Return HH:MM of the next upcoming window from *now*, or None if empty."""
-    for h, m in times:
-        if (h, m) > (now.hour, now.minute):
-            return f"{h:02d}:{m:02d}"
-    # All windows passed today — next is first window tomorrow
-    if times:
-        h, m = times[0]
-        return f"{h:02d}:{m:02d}"
-    return None
+def _parse_cron(expr: str) -> tuple[set[int], set[int], set[int], set[int], set[int]]:
+    """Parse a 5-field cron expression into (minutes, hours, doms, months, dows)."""
+    fields = expr.strip().split()
+    if len(fields) != 5:
+        raise ValueError(f"cron expression must have 5 fields, got {len(fields)!r}: {expr!r}")
+    mins   = _expand_field(fields[0], 0, 59)
+    hours  = _expand_field(fields[1], 0, 23)
+    doms   = _expand_field(fields[2], 1, 31)
+    months = _expand_field(fields[3], 1, 12)
+    dows   = _expand_field(fields[4], 0, 6)   # 0 = Sunday
+    return mins, hours, doms, months, dows
 
+
+def _matches(dt: datetime, parsed: tuple) -> bool:
+    mins, hours, doms, months, dows = parsed
+    return (
+        dt.minute in mins
+        and dt.hour in hours
+        and dt.day in doms
+        and dt.month in months
+        and dt.weekday() % 7 in dows  # Python Mon=0; cron Sun=0 → shift
+    )
+
+
+def _next_fire(parsed: tuple, after: datetime) -> datetime:
+    """Return the next datetime (minute precision) matching *parsed* after *after*."""
+    candidate = (after + timedelta(minutes=1)).replace(second=0, microsecond=0)
+    for _ in range(60 * 24 * 366):  # search up to ~1 year
+        if _matches(candidate, parsed):
+            return candidate
+        candidate += timedelta(minutes=1)
+    raise RuntimeError("no matching cron time found within 1 year")
+
+
+# ---------------------------------------------------------------------------
+# Scheduler loop
+# ---------------------------------------------------------------------------
 
 def _ticker_loop(config: "Config", stop_event: threading.Event) -> None:
-    times = _parse_times(config.window_starts)
-    if not times:
-        logger.info("ticker: no window_starts configured, ticker idle")
+    expr = config.window_cron
+    if not expr:
+        logger.info("ticker: no window_cron configured, scheduler idle")
         return
 
-    logger.info("ticker: windows configured at {}", [f"{h:02d}:{m:02d}" for h, m in times])
+    try:
+        parsed = _parse_cron(expr)
+    except ValueError:
+        logger.error("ticker: invalid window_cron {!r}, scheduler disabled", expr)
+        return
 
-    # Track which (date, HH:MM) combos have already fired
-    fired: set[tuple[date, str]] = set()
+    logger.info("ticker: cron scheduler active — {!r}", expr)
+
+    # Track which minute we last fired so we don't double-fire
+    last_fired_minute: datetime | None = None
 
     with _state_lock:
-        _state["window_starts"] = config.window_starts[:]
-        _state["next_window"] = _next_window(times, datetime.now())
+        _state["window_cron"] = expr
+        _state["next_fire"] = _next_fire(parsed, datetime.now()).isoformat(timespec="minutes")
 
     while not stop_event.wait(timeout=POLL_INTERVAL):
-        now = datetime.now()
-        for h, m in times:
-            label = f"{h:02d}:{m:02d}"
-            key = (now.date(), label)
-            # Fire if within the target minute and not yet fired today
-            if now.hour == h and now.minute == m and key not in fired:
-                fired.add(key)
-                _fire(config, label)
-
+        now = datetime.now().replace(second=0, microsecond=0)
+        if _matches(now, parsed) and now != last_fired_minute:
+            last_fired_minute = now
+            _fire(config, now)
         with _state_lock:
-            _state["next_window"] = _next_window(times, now)
+            _state["next_fire"] = _next_fire(parsed, datetime.now()).isoformat(timespec="minutes")
 
     logger.info("ticker: stopped")
 
 
-def _fire(config: "Config", label: str) -> None:
-    logger.info("ticker: firing window tick for {}", label)
+def _fire(config: "Config", now: datetime) -> None:
+    label = now.strftime("%H:%M")
+    logger.info("ticker: firing cron job at {}", label)
     try:
         result = subprocess.run(
             ["claude", "-p", "hi"],
@@ -104,19 +143,18 @@ def _fire(config: "Config", label: str) -> None:
             timeout=60,
         )
         if result.returncode == 0:
-            logger.info("ticker: window tick OK for {}", label)
+            logger.info("ticker: cron fire OK at {}", label)
         else:
-            logger.warning("ticker: claude returned {} for {}: {}", result.returncode, label, result.stderr.strip())
+            logger.warning("ticker: claude exited {} at {}: {}", result.returncode, label, result.stderr.strip())
     except Exception:
-        logger.exception("ticker: failed to fire for {}", label)
+        logger.exception("ticker: cron fire failed at {}", label)
 
     with _state_lock:
-        _state["last_fired"] = label
-        _state["last_fired_at"] = datetime.now().isoformat(timespec="seconds")
+        _state["last_fired_at"] = now.isoformat(timespec="seconds")
 
 
 def start_ticker(config: "Config") -> tuple[threading.Thread, threading.Event]:
-    """Start the ticker thread. Returns (thread, stop_event)."""
+    """Start the scheduler thread. Returns (thread, stop_event)."""
     stop_event = threading.Event()
     thread = threading.Thread(
         target=_ticker_loop,
