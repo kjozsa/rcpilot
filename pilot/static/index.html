@@ -434,6 +434,58 @@
     }
 
     /* ── Diff modal ──────────────────────────────────────────────────── */
+    #ticker-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.6);
+      z-index: 100;
+      align-items: flex-end;
+    }
+    #ticker-overlay.open { display: flex; }
+    #ticker-sheet {
+      background: var(--surface2);
+      border-top: 1px solid var(--border);
+      border-radius: var(--radius) var(--radius) 0 0;
+      width: 100%;
+      max-height: 60vh;
+      display: flex;
+      flex-direction: column;
+    }
+    #ticker-log-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: .6rem 1rem;
+      border-bottom: 1px solid var(--border);
+      font-size: .9rem;
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+    #ticker-log-header button {
+      background: none; border: none; color: var(--muted);
+      font-size: 1.3rem; line-height: 1; padding: .2rem .5rem; cursor: pointer;
+    }
+    #ticker-log-body {
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: .75rem 1rem;
+      flex: 1;
+    }
+    .ticker-log-row {
+      display: flex;
+      align-items: center;
+      gap: .6rem;
+      padding: .45rem 0;
+      border-bottom: 1px solid var(--border);
+      font-size: .85rem;
+    }
+    .ticker-log-row:last-child { border-bottom: none; }
+    .ticker-log-ok   { color: var(--green); font-size: 1rem; }
+    .ticker-log-fail { color: var(--red);   font-size: 1rem; }
+    .ticker-log-time { color: var(--text);  font-weight: 500; flex: 1; }
+    .ticker-log-detail { color: var(--muted); font-size: .75rem; }
+
     #diff-overlay {
       display: none;
       position: fixed;
@@ -783,6 +835,15 @@
 <div id="error-banner"></div>
 <div id="project-list"></div>
 
+<div id="ticker-overlay" onclick="closeTickerLog(event)">
+  <div id="ticker-sheet">
+    <div id="ticker-log-header">
+      <span>Window trigger log</span>
+      <button onclick="closeTickerLog()">✕</button>
+    </div>
+    <div id="ticker-log-body"></div>
+  </div>
+</div>
 <div id="diff-overlay" onclick="closeDiff(event)">
   <div id="diff-sheet">
     <div id="diff-header">
@@ -1433,7 +1494,9 @@
       pill.innerHTML = `⏱ <span class="ticker-label">next window </span><span class="ticker-next">${next}</span>${lastFired ? ` · ${lastFired}` : ''}`;
       pill.className = 'ticker-pill' + (data.last_fired_at ? ' fired' : '');
       pill.style.display = 'flex';
-      pill.title = `Cron: ${data.window_cron}${data.last_fired_at ? ' · Last fired: ' + data.last_fired_at : ''}`;
+      pill.style.cursor = 'pointer';
+      pill.title = `Cron: ${data.window_cron} — tap to see fire log`;
+      pill.onclick = () => openTickerLog(data);
     } catch (_) {}
   }
 
@@ -1485,6 +1548,27 @@
     }
   }
 
+  function openTickerLog(data) {
+    const body = document.getElementById('ticker-log-body');
+    const log = data.fire_log || [];
+    if (log.length === 0) {
+      body.innerHTML = `<div style="color:var(--muted);padding:.5rem 0">No fires recorded yet this session.</div>`;
+    } else {
+      body.innerHTML = log.map(e => `
+        <div class="ticker-log-row">
+          <span class="${e.ok ? 'ticker-log-ok' : 'ticker-log-fail'}">${e.ok ? '✓' : '✗'}</span>
+          <span class="ticker-log-time">${e.fired_at.replace('T', ' ')}</span>
+          ${e.detail ? `<span class="ticker-log-detail">${escHtml(e.detail)}</span>` : ''}
+        </div>`).join('');
+    }
+    document.getElementById('ticker-overlay').classList.add('open');
+  }
+
+  function closeTickerLog(e) {
+    if (e && e.target !== document.getElementById('ticker-overlay')) return;
+    document.getElementById('ticker-overlay').classList.remove('open');
+  }
+
   function closeDiff(e) {
     if (e && e.target !== document.getElementById('diff-overlay')) return;
     document.getElementById('diff-overlay').classList.remove('open');
@@ -1492,7 +1576,7 @@
   }
 
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') { closeDiff(); closeSnapshot(); closeSend(); closePRReview(); closeNewSession(); }
+    if (e.key === 'Escape') { closeDiff(); closeSnapshot(); closeSend(); closePRReview(); closeNewSession(); closeTickerLog(); }
   });
 
   function colorDiff(text) {

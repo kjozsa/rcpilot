@@ -29,8 +29,9 @@ POLL_INTERVAL: float = 30.0  # seconds between checks
 
 _state: dict = {
     "window_cron": None,
-    "last_fired_at": None,  # ISO datetime string
-    "next_fire": None,      # ISO datetime string of next scheduled fire
+    "last_fired_at": None,   # ISO datetime string of most recent fire
+    "next_fire": None,       # ISO datetime string of next scheduled fire
+    "fire_log": [],          # last 5 fires: [{fired_at, ok, detail}]
 }
 _state_lock = threading.Lock()
 
@@ -134,6 +135,8 @@ def _ticker_loop(config: "Config", stop_event: threading.Event) -> None:
 def _fire(config: "Config", now: datetime) -> None:
     label = now.strftime("%H:%M")
     logger.info("ticker: firing cron job at {}", label)
+    ok = False
+    detail = ""
     try:
         result = subprocess.run(
             ["claude", "-p", "hi"],
@@ -142,15 +145,20 @@ def _fire(config: "Config", now: datetime) -> None:
             text=True,
             timeout=60,
         )
-        if result.returncode == 0:
+        ok = result.returncode == 0
+        detail = result.stderr.strip() if not ok else ""
+        if ok:
             logger.info("ticker: cron fire OK at {}", label)
         else:
-            logger.warning("ticker: claude exited {} at {}: {}", result.returncode, label, result.stderr.strip())
-    except Exception:
+            logger.warning("ticker: claude exited {} at {}: {}", result.returncode, label, detail)
+    except Exception as e:
+        detail = str(e)
         logger.exception("ticker: cron fire failed at {}", label)
 
+    entry = {"fired_at": now.isoformat(timespec="seconds"), "ok": ok, "detail": detail}
     with _state_lock:
         _state["last_fired_at"] = now.isoformat(timespec="seconds")
+        _state["fire_log"] = ([entry] + _state["fire_log"])[:5]
 
 
 def start_ticker(config: "Config") -> tuple[threading.Thread, threading.Event]:
