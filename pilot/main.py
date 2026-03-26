@@ -228,7 +228,6 @@ def start_session(
         name=name,
         prefix=_config.tmux_session_prefix,
         db_path=str(_config.db_path),
-        spawn_mode=_config.spawn_mode,
         yolo=yolo,
     )
 

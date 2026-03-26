@@ -26,10 +26,6 @@ port = 8000
 # Prefix prepended to every tmux session name to avoid collisions.
 tmux_session_prefix = "pilot-"
 
-# How claude is spawned. Options: "session" | "same-dir" | "worktree"
-# "session" produces a /session_xxx URL that the Claude mobile app handles correctly.
-spawn_mode = "session"
-
 # SQLite database file path.
 db_path = "~/.config/claude-pilot/pilot.db"
 """
@@ -47,10 +43,6 @@ class Config:
     port: int = 8000
     # Prefix prepended to every tmux session name to avoid collisions
     tmux_session_prefix: str = "pilot-"
-    # Passed as --spawn=<value> to claude remote-control; skips the interactive
-    # first-run prompt. Options: "session" | "same-dir" | "worktree"
-    # "session" produces a /session_xxx URL that the Claude mobile app handles correctly.
-    spawn_mode: str = "session"
     # SQLite database file path
     db_path: Path = field(default_factory=lambda: Path.home() / ".config" / "claude-pilot" / "pilot.db")
 
@@ -85,8 +77,6 @@ def load_config(path: Path | None = None) -> Config:
         kwargs["port"] = int(raw["port"])
     if "tmux_session_prefix" in raw:
         kwargs["tmux_session_prefix"] = str(raw["tmux_session_prefix"])
-    if "spawn_mode" in raw:
-        kwargs["spawn_mode"] = str(raw["spawn_mode"])
     if "db_path" in raw:
         kwargs["db_path"] = Path(raw["db_path"]).expanduser()
 

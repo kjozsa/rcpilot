@@ -64,7 +64,6 @@ def start_session(
     name: str,
     prefix: str,
     db_path: str,
-    spawn_mode: str = "same-dir",
     yolo: bool = False,
 ) -> dict[str, Any]:
     """
@@ -78,7 +77,7 @@ def start_session(
     session_name = f"{_tmux_session_name(prefix, project)}-{suffix}"
     logger.info("start_session: project={} session={} name={!r}", project, session_name, name)
 
-    cmd = f"claude remote-control --spawn={spawn_mode}{' --enable-auto-mode' if yolo else ''}"
+    cmd = f"claude remote-control --spawn=session{' --permission-mode bypassPermissions' if yolo else ''}"
     logger.info("spawning tmux session in {} cmd={!r}", project_path, cmd)
     subprocess.run(
         [
