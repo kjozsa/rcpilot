@@ -1066,7 +1066,8 @@
     if (clearBtn) clearBtn.style.display = 'block';
     toggle.textContent = (container.classList.contains('open') ? '▾' : '▸') + ` History (${records.length})`;
 
-    const shown = records.slice(0, 5);
+    const expanded = container.dataset.expanded === 'true';
+    const shown = expanded ? records : records.slice(0, 5);
     const rows = shown.map(r => `
       <tr>
         <td class="name-cell" data-session-id="${r.id}" data-project="${escHtml(name)}">
@@ -1083,7 +1084,7 @@
     `).join('');
 
     const moreRow = records.length > 5
-      ? `<tr><td colspan="4" style="color:var(--muted);font-style:italic">… ${records.length - 5} more</td></tr>`
+      ? `<tr><td colspan="4"><button class="btn-expand-history" style="background:none;border:none;color:var(--muted);font-style:italic;cursor:pointer;padding:.2rem 0">${expanded ? '▲ show less' : `… ${records.length - 5} more`}</button></td></tr>`
       : '';
 
     container.innerHTML = `
@@ -1101,6 +1102,12 @@
     });
     container.querySelectorAll('.btn-continue').forEach(btn => {
       btn.addEventListener('click', () => continueSession(btn.dataset.project, +btn.dataset.sessionId, btn));
+    });
+    container.querySelectorAll('.btn-expand-history').forEach(btn => {
+      btn.addEventListener('click', () => {
+        container.dataset.expanded = expanded ? 'false' : 'true';
+        renderHistory(name, records);
+      });
     });
 
   }
