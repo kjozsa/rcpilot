@@ -49,18 +49,7 @@
     header h1 { font-size: 1.3rem; letter-spacing: .02em; }
     header h1 span { color: var(--accent); }
 
-    #refresh-btn {
-      background: none;
-      border: 1px solid var(--border);
-      color: var(--muted);
-      border-radius: var(--radius);
-      padding: .35rem .75rem;
-      cursor: pointer;
-      font-size: .85rem;
-    }
-    #refresh-btn:hover { border-color: var(--accent); color: var(--text); }
-
-    /* ── Project cards ───────────────────────────────────────────────── */
+/* ── Project cards ───────────────────────────────────────────────── */
     #project-list { display: flex; flex-direction: column; gap: var(--gap); }
 
     .project-card {
@@ -790,7 +779,6 @@
     </div>
     <div style="display:flex;align-items:center;gap:.75rem">
       <label class="yolo-label"><input type="checkbox" id="yolo-global" checked> YOLO</label>
-      <button id="refresh-btn" onclick="loadProjects()">↺ Refresh</button>
     </div>
   </div>
 </header>
