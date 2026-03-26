@@ -26,7 +26,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     project       TEXT    NOT NULL,
     name          TEXT,
-    tmux_session  TEXT,              -- unique tmux session name for this instance
+    pid           INTEGER,           -- OS pid of the `script` process holding the PTY
+    log_path      TEXT,              -- path to the session log file written by `script`
     started_at    TEXT    NOT NULL,  -- ISO-8601 UTC
     ended_at      TEXT,              -- NULL while still running
     status        TEXT    NOT NULL DEFAULT 'running',
@@ -54,11 +55,12 @@ async def init_db(db_path: str) -> None:
     async with aiosqlite.connect(db_path) as db:
         await db.execute(CREATE_SESSIONS_TABLE)
         await db.execute(CREATE_SESSION_LOGS_TABLE)
-        # Migration: add tmux_session column to existing databases
         cols = await db.execute("PRAGMA table_info(sessions)")
         col_names = [row[1] for row in await cols.fetchall()]
-        if "tmux_session" not in col_names:
-            await db.execute("ALTER TABLE sessions ADD COLUMN tmux_session TEXT")
+        if "pid" not in col_names:
+            await db.execute("ALTER TABLE sessions ADD COLUMN pid INTEGER")
+        if "log_path" not in col_names:
+            await db.execute("ALTER TABLE sessions ADD COLUMN log_path TEXT")
         await db.commit()
 
 
@@ -80,15 +82,16 @@ def create_session(
     db_path: str,
     project: str,
     name: str,
-    tmux_session: str,
+    pid: int | None,
     rc_url: str | None,
+    log_path: str | None = None,
 ) -> int:
     """Insert a new running session row; return its id."""
     with _connect(db_path) as conn:
         cur = conn.execute(
-            "INSERT INTO sessions (project, name, tmux_session, started_at, status, rc_url) "
-            "VALUES (?, ?, ?, ?, 'running', ?)",
-            (project, name, tmux_session, _now(), rc_url),
+            "INSERT INTO sessions (project, name, pid, log_path, started_at, status, rc_url) "
+            "VALUES (?, ?, ?, ?, ?, 'running', ?)",
+            (project, name, pid, log_path, _now(), rc_url),
         )
         conn.commit()
         return cur.lastrowid  # type: ignore[return-value]

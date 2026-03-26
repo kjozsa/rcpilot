@@ -1,6 +1,6 @@
 """
 Project discovery — scans projects_dir and returns lightweight metadata.
-No tmux / session awareness here; keep this module pure filesystem.
+No session awareness here; keep this module pure filesystem.
 """
 
 from __future__ import annotations

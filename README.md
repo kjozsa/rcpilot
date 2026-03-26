@@ -5,7 +5,7 @@
 claude-pilot is a lightweight, self-hosted session manager for
 [Claude Code Remote Control](https://docs.anthropic.com/en/docs/claude-code).
 Run it on a Raspberry Pi (or any always-on machine) and get a mobile-friendly
-web UI to launch, reconnect to, and eventually persist your coding sessions.
+web UI to launch, reconnect to, and manage your coding sessions from anywhere.
 
 ---
 
@@ -33,13 +33,6 @@ projects_dir = "~/projects"
 # Bind address; keep 0.0.0.0 for VPN / LAN access
 host = "0.0.0.0"
 port = 8000
-
-# Prefix for tmux session names — avoids collisions with your own sessions
-tmux_session_prefix = "pilot-"
-
-# How claude is spawned: "session" | "same-dir" | "worktree"
-# "session" produces a /session_xxx URL the Claude mobile app handles correctly
-spawn_mode = "session"
 
 # SQLite database path
 db_path = "~/.config/claude-pilot/pilot.db"
@@ -117,8 +110,20 @@ authentication (planned for Phase 3).
 ## Requirements
 
 - Python 3.11+
-- `tmux` — must be on `PATH`
+- `script` (from `util-linux`) — standard on all Linux systems, no install needed
 - `claude` — Claude Code CLI, must be on `PATH` and authenticated
+
+---
+
+## How sessions work
+
+Each session runs `claude remote-control --spawn=session` inside the `script`
+command, which owns the PTY independently of the pilot server process. This means:
+
+- **Sessions survive pilot restarts** — stopping or restarting the server does
+  not kill active Claude Code sessions.
+- Session output is logged to `~/.config/claude-pilot/session-*.log` while
+  running, then stored in SQLite when the session ends.
 
 ---
 
@@ -129,7 +134,7 @@ git clone <repo>
 cd claude-pilot
 uv sync --extra dev
 uv run pytest
-uv run pilot          # starts server with live reload
+uv run pilot
 ```
 
 ---
@@ -140,8 +145,8 @@ See [ROADMAP.md](ROADMAP.md) for the full plan.
 
 | Phase | Status | Highlights |
 |-------|--------|-----------|
-| 0 — Foundation | ✅ done | Project discovery, tmux sessions, web UI |
-| 1 — Persistence | ✅ done | SQLite session history, watchdog, session naming, multiple concurrent sessions |
+| 0 — Foundation | ✅ done | Project discovery, web UI, session management |
+| 1 — Persistence | ✅ done | SQLite history, watchdog, naming, concurrent sessions, restart-safe PTY via `script` |
 | 2 — Context memory | 🔜 next | Claude API summarization, resume with context |
 | 3 — Polish | 💡 planned | Docker, auth, PWA, PyPI publish |
 

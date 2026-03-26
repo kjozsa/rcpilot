@@ -75,7 +75,7 @@ def test_get_history_unknown_project_returns_404(client: TestClient) -> None:
     assert resp.status_code == 404
 
 
-def test_get_session_status_stopped_when_no_tmux(client_with_project: tuple) -> None:
+def test_get_session_status_stopped_when_process_gone(client_with_project: tuple) -> None:
     client, name = client_with_project
     with patch("pilot.sessions._session_exists", return_value=False):
         resp = client.get(f"/api/sessions/{name}")

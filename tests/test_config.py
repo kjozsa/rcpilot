@@ -17,7 +17,6 @@ def test_defaults_when_no_file(tmp_path: Path) -> None:
     assert isinstance(cfg, Config)
     assert cfg.port == 8000
     assert cfg.host == "0.0.0.0"
-    assert cfg.tmux_session_prefix == "pilot-"
 
 
 def test_loads_values_from_toml(tmp_path: Path) -> None:
@@ -27,7 +26,6 @@ def test_loads_values_from_toml(tmp_path: Path) -> None:
         'projects_dir = "/tmp/my-projects"\n'
         'host = "127.0.0.1"\n'
         "port = 9000\n"
-        'tmux_session_prefix = "myprefix-"\n'
     )
 
     cfg = load_config(config_file)
@@ -35,7 +33,6 @@ def test_loads_values_from_toml(tmp_path: Path) -> None:
     assert cfg.projects_dir == Path("/tmp/my-projects")
     assert cfg.host == "127.0.0.1"
     assert cfg.port == 9000
-    assert cfg.tmux_session_prefix == "myprefix-"
 
 
 def test_partial_toml_keeps_other_defaults(tmp_path: Path) -> None:
@@ -54,12 +51,12 @@ def test_env_var_path_used_when_no_explicit_path(
 ) -> None:
     """PILOT_CONFIG env var is respected when no path is passed explicitly."""
     config_file = tmp_path / "via_env.toml"
-    config_file.write_text('tmux_session_prefix = "env-"\n')
+    config_file.write_text('port = 7654\n')
 
     monkeypatch.setenv("PILOT_CONFIG", str(config_file))
     cfg = load_config()  # no path argument
 
-    assert cfg.tmux_session_prefix == "env-"
+    assert cfg.port == 7654
 
 
 def test_tilde_expansion_in_projects_dir(tmp_path: Path) -> None:

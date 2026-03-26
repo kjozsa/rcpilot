@@ -23,7 +23,7 @@ def cfg(tmp_path: Path) -> Config:
 
 
 def test_sweep_marks_dead_session_stopped(cfg: Config, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Watchdog marks a session stopped when its tmux session no longer exists."""
+    """Watchdog marks a session stopped when its process is no longer alive."""
     monkeypatch.setattr("pilot.watchdog._session_exists", lambda _: False)
 
     sid = create_session(str(cfg.db_path), "my-project", None)
@@ -35,7 +35,7 @@ def test_sweep_marks_dead_session_stopped(cfg: Config, monkeypatch: pytest.Monke
 
 
 def test_sweep_leaves_live_session_alone(cfg: Config, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Watchdog does not touch a session whose tmux session is still running."""
+    """Watchdog does not touch a session whose process is still running."""
     monkeypatch.setattr("pilot.watchdog._session_exists", lambda _: True)
 
     sid = create_session(str(cfg.db_path), "my-project", None)

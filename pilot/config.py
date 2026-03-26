@@ -23,9 +23,6 @@ projects_dir = "~/projects"
 host = "0.0.0.0"
 port = 8000
 
-# Prefix prepended to every tmux session name to avoid collisions.
-tmux_session_prefix = "pilot-"
-
 # SQLite database file path.
 db_path = "~/.config/claude-pilot/pilot.db"
 """
@@ -41,8 +38,6 @@ class Config:
     # Uvicorn bind host; 0.0.0.0 makes it reachable over a VPN
     host: str = "0.0.0.0"
     port: int = 8000
-    # Prefix prepended to every tmux session name to avoid collisions
-    tmux_session_prefix: str = "pilot-"
     # SQLite database file path
     db_path: Path = field(default_factory=lambda: Path.home() / ".config" / "claude-pilot" / "pilot.db")
 
@@ -75,8 +70,6 @@ def load_config(path: Path | None = None) -> Config:
         kwargs["host"] = str(raw["host"])
     if "port" in raw:
         kwargs["port"] = int(raw["port"])
-    if "tmux_session_prefix" in raw:
-        kwargs["tmux_session_prefix"] = str(raw["tmux_session_prefix"])
     if "db_path" in raw:
         kwargs["db_path"] = Path(raw["db_path"]).expanduser()
 
