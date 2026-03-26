@@ -208,6 +208,28 @@
     .btn-commit    { background: rgba(245,166,35,.1); color: var(--yellow); border: 1px solid rgba(245,166,35,.35); font-weight: normal; }
     .btn-commit:disabled { background: none; color: var(--muted); border-color: var(--border); }
 
+    /* ── Window ticker ───────────────────────────────────────────────── */
+    .ticker-pill {
+      display: flex;
+      align-items: center;
+      gap: .35rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: .25rem .6rem;
+      font-size: .75rem;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .ticker-pill .ticker-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--muted);
+      flex-shrink: 0;
+    }
+    .ticker-pill.fired .ticker-dot { background: var(--green); }
+    .ticker-pill .ticker-next { color: var(--text); font-weight: 500; }
+
     /* ── Sort toggle buttons ─────────────────────────────────────────── */
     .sort-toggle {
       display: flex;
@@ -765,6 +787,7 @@
 <header>
   <h1>rc<span>-</span>pilot <small id="version" style="font-size:.7rem;color:var(--muted);font-weight:400"></small></h1>
   <div style="display:flex;align-items:center;gap:.75rem">
+    <div id="ticker-pill" class="ticker-pill" title="Usage window ticker" style="display:none"></div>
     <div class="sort-toggle">
       <button class="sort-btn" id="sort-modified" onclick="setSortOrder('modified')" title="Sort by recently modified">🕒</button>
       <button class="sort-btn" id="sort-alpha" onclick="setSortOrder('alpha')" title="Sort alphabetically">🔤</button>
@@ -855,6 +878,8 @@
     fetch('/api/info').then(r => r.json()).then(d => {
       document.getElementById('version').textContent = 'v' + d.version;
     });
+    loadTicker();
+    setInterval(loadTicker, 60_000);
     document.getElementById('newsession-name').addEventListener('keydown', e => {
       if (e.key === 'Enter') { e.preventDefault(); submitNewSession(); }
     });
@@ -1412,6 +1437,24 @@
   }
 
   // ── UI helpers ─────────────────────────────────────────────────────────
+  async function loadTicker() {
+    try {
+      const data = await fetch('/api/ticker').then(r => r.json());
+      const pill = document.getElementById('ticker-pill');
+      if (!data.window_starts || data.window_starts.length === 0) {
+        pill.style.display = 'none';
+        return;
+      }
+      const windows = data.window_starts.join(' · ');
+      const next = data.next_window ? `<span class="ticker-next">${data.next_window}</span>` : '';
+      const lastFired = data.last_fired ? ` · fired ${data.last_fired}` : '';
+      pill.innerHTML = `<span class="ticker-dot"></span>⏱ ${windows}${lastFired}${next ? ' → ' + next : ''}`;
+      pill.className = 'ticker-pill' + (data.last_fired ? ' fired' : '');
+      pill.style.display = 'flex';
+      pill.title = data.last_fired_at ? `Last fired at ${data.last_fired_at}` : 'No fires yet today';
+    } catch (_) {}
+  }
+
   function showError(msg) {
     const banner = document.getElementById('error-banner');
     if (msg) { banner.textContent = msg; banner.style.display = 'block'; }

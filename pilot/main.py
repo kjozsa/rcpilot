@@ -33,6 +33,7 @@ from pilot.projects import list_projects
 from pilot import db as pilot_db
 from pilot import sessions as session_mgr
 from pilot.watchdog import start_watchdog
+from pilot.ticker import start_ticker, get_ticker_state
 
 _config: Config = load_config()
 _STATIC_DIR = Path(__file__).parent / "static"
@@ -71,13 +72,18 @@ async def lifespan(app: FastAPI):  # type: ignore[type-arg]
     _ensure_code_review_plugin()
 
     logger.info("starting watchdog")
-    _thread, _stop = start_watchdog(_config)
+    _wd_thread, _wd_stop = start_watchdog(_config)
+
+    logger.info("starting ticker (window_starts={})", _config.window_starts)
+    _tk_thread, _tk_stop = start_ticker(_config)
 
     yield  # server runs here
 
-    logger.info("shutting down — signalling watchdog")
-    _stop.set()
-    _thread.join(timeout=5)
+    logger.info("shutting down — signalling watchdog and ticker")
+    _wd_stop.set()
+    _wd_thread.join(timeout=5)
+    _tk_stop.set()
+    _tk_thread.join(timeout=5)
 
 
 app = FastAPI(title="rcpilot", version="0.1.0", lifespan=lifespan)
@@ -101,6 +107,12 @@ def serve_index() -> FileResponse:
 @app.get("/api/info")
 def get_info() -> dict:
     return {"version": pkg_version("rcpilot")}
+
+
+@app.get("/api/ticker")
+def get_ticker() -> dict:
+    """Return window ticker state: configured times, last fired, next window."""
+    return get_ticker_state()
 
 
 @app.get("/api/projects")
