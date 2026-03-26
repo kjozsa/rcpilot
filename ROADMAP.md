@@ -19,7 +19,7 @@ The skeleton. Enough to be useful on day one.
 - [x] FastAPI app scaffold, deployable via `uvx claude-pilot` or `uv tool install claude-pilot`
 - [x] Configurable projects directory (via `config.toml` or env vars)
 - [x] Project discovery — scans directory, lists projects in web UI
-- [x] Spawn `claude remote-control` for a selected project into a `tmux` session
+- [x] Spawn `claude remote-control` for a selected project into a PTY session
 - [x] Capture RC session URL from process stdout, surface it in the UI
 - [x] Basic session status per project — running / stopped / timed out
 - [x] Kill and restart a session from the UI
@@ -39,7 +39,7 @@ The thing RC fundamentally lacks: memory across sessions.
 - [x] Auto-restart watchdog — detect RC timeout/crash, mark session stopped
 - [x] Session naming — auto-name sessions by date, allow manual rename
 - [x] Clear session history per project
-- [x] `send-keys` endpoint — send text to the active tmux session from the UI
+- [x] `send-keys` endpoint — send text to the active session from the UI
 - [x] `run-claude` endpoint — run `claude -p <prompt>` in project dir
 - [x] `review-pr` endpoint — fetch a GitHub PR via `gh` and review with Claude
 - [x] Git diff and git pull endpoints per project
@@ -97,7 +97,7 @@ Things worth considering but not yet committed to a phase:
 |---|---|---|
 | Backend | Python + FastAPI | Async, lightweight, great DX |
 | Deploy | `uv` / `uvx` | Zero-friction install, modern Python packaging |
-| Process mgmt | `tmux` + `asyncio.subprocess` | Inspectable via SSH, Pi-friendly |
+| Process mgmt | `script` + `asyncio.subprocess` | Restart-safe PTY sessions, inspectable via SSH |
 | Persistence | SQLite via `aiosqlite` | No server, file-based, Pi-appropriate |
 | AI features | Anthropic Python SDK | Claude API for summarization + context injection |
 | Frontend | Vanilla HTML/CSS/JS (served by FastAPI) | No build step, minimal footprint |

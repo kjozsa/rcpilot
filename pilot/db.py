@@ -26,7 +26,6 @@ CREATE TABLE IF NOT EXISTS sessions (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     project       TEXT    NOT NULL,
     name          TEXT,
-    tmux_session  TEXT,              -- legacy: kept for old records only
     pid           INTEGER,           -- OS pid of the `script` process holding the PTY
     log_path      TEXT,              -- path to the session log file written by `script`
     started_at    TEXT    NOT NULL,  -- ISO-8601 UTC
@@ -56,11 +55,8 @@ async def init_db(db_path: str) -> None:
     async with aiosqlite.connect(db_path) as db:
         await db.execute(CREATE_SESSIONS_TABLE)
         await db.execute(CREATE_SESSION_LOGS_TABLE)
-        # Migration: add tmux_session column to existing databases
         cols = await db.execute("PRAGMA table_info(sessions)")
         col_names = [row[1] for row in await cols.fetchall()]
-        if "tmux_session" not in col_names:
-            await db.execute("ALTER TABLE sessions ADD COLUMN tmux_session TEXT")
         if "pid" not in col_names:
             await db.execute("ALTER TABLE sessions ADD COLUMN pid INTEGER")
         if "log_path" not in col_names:

@@ -5,8 +5,7 @@ Every POLL_INTERVAL seconds, checks all sessions marked 'running' in the DB
 and verifies their process is still alive via os.kill(pid, 0).
 If the process is gone, the DB record is updated to 'stopped'.
 
-Old records with no pid (legacy tmux sessions) are marked stopped immediately
-since we can no longer verify them.
+Records with no pid are marked stopped immediately since they cannot be verified.
 """
 
 from __future__ import annotations

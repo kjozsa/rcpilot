@@ -36,6 +36,26 @@ from pilot.watchdog import start_watchdog
 
 _config: Config = load_config()
 _STATIC_DIR = Path(__file__).parent / "static"
+_CLAUDE_SETTINGS = Path.home() / ".claude" / "settings.json"
+_CODE_REVIEW_PLUGIN = "code-review@claude-plugins-official"
+
+
+def _ensure_code_review_plugin() -> None:
+    """Enable the code-review plugin in ~/.claude/settings.json if not already present."""
+    import json
+    settings: dict = {}
+    if _CLAUDE_SETTINGS.exists():
+        try:
+            settings = json.loads(_CLAUDE_SETTINGS.read_text())
+        except Exception:
+            pass
+    plugins: dict = settings.setdefault("enabledPlugins", {})
+    if plugins.get(_CODE_REVIEW_PLUGIN) is True:
+        return
+    plugins[_CODE_REVIEW_PLUGIN] = True
+    _CLAUDE_SETTINGS.parent.mkdir(parents=True, exist_ok=True)
+    _CLAUDE_SETTINGS.write_text(json.dumps(settings, indent=2) + "\n")
+    logger.info("enabled {} in {}", _CODE_REVIEW_PLUGIN, _CLAUDE_SETTINGS)
 
 
 # ---------------------------------------------------------------------------
@@ -48,6 +68,7 @@ async def lifespan(app: FastAPI):  # type: ignore[type-arg]
     logger.info("initialising database at {}", db_path)
     _config.db_path.parent.mkdir(parents=True, exist_ok=True)
     await pilot_db.init_db(db_path)
+    _ensure_code_review_plugin()
 
     logger.info("starting watchdog")
     _thread, _stop = start_watchdog(_config)
@@ -128,20 +149,24 @@ def review_pr(
     project: str,
     pr_number: int = Body(..., embed=True),
 ) -> dict:
-    """Review a PR using Claude Code's built-in /review-pr skill."""
+    """Kick off a PR code review in the background.
+
+    The code-review plugin posts its findings as a GitHub PR comment, so we
+    launch the claude process detached and return immediately rather than
+    waiting up to several minutes for it to finish.
+    """
     import subprocess
     path = _get_project_path(project)
-    result = subprocess.run(
-        ["claude", "-p", f"/review-pr {pr_number}"],
+    subprocess.Popen(
+        ["claude", "-p", f"/code-review:code-review {pr_number}"],
         cwd=path,
-        capture_output=True,
-        text=True,
-        timeout=300,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
     )
     return {
-        "review": result.stdout.strip(),
-        "error": result.stderr.strip(),
-        "returncode": result.returncode,
+        "review": f"Review started for PR #{pr_number}. Results will be posted as a comment on the GitHub PR.",
+        "error": "",
+        "returncode": 0,
     }
 
 
