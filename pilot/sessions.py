@@ -1,124 +1,133 @@
 """
-Session management — spawn / kill / query claude remote-control inside tmux.
+Session management — spawn / kill / query claude remote-control via `script`.
 
-Each session gets its own uniquely named tmux session: ``{prefix}{project}-{hex}``,
-allowing multiple concurrent sessions per project.
-Session state is persisted to SQLite via pilot.db so it survives server restarts.
+Each session runs `claude remote-control --spawn=session` inside the `script`
+command, which creates and owns a PTY independently of this Python process.
+All output is written to a log file. Because `script` is a separate OS process,
+sessions survive FastAPI restarts — the log file and pid are persisted in SQLite.
+
+Flow:
+  start  → spawn `script -q -e -c "claude ..." {log_path}` detached
+           → poll log file until RC URL appears
+           → store pid + log_path + url in DB
+  list   → check os.kill(pid, 0) for each running DB record
+  kill   → SIGTERM the script process group (kills script + claude together)
+           → read log file for snapshot
 """
 
 from __future__ import annotations
 
 import os
 import re
+import secrets
+import signal
 import subprocess
 import time
-from typing import Any, Literal
+from pathlib import Path
+from typing import Any
 
 from loguru import logger
 
 import pilot.db as db
 
-# Matches the RC session URL that `claude remote-control` prints.
-# Known formats (both observed in the wild):
-#   https://claude.ai/code/session_01VG9LMVdzoPXv6FLKEk4Mwf   (session path)
-#   https://claude.ai/code?bridge=env_01Abc...                 (bridge query param)
-# The token may wrap across lines at the terminal width, so we join lines
-# before matching (see _extract_rc_url).
-_RC_URL_PATTERN = re.compile(r"https://claude\.ai/code[/\?][A-Za-z0-9_=?&-]+")
+# Matches the RC session URL printed by `claude remote-control`
+_RC_URL_PATTERN = re.compile(r"https://claude\.ai/code[/\?][A-Za-z0-9_=?&%-]+")
 
-SessionStatus = Literal["running", "stopped", "timed_out"]
+# Strip ANSI escape codes (present in PTY output captured by `script`)
+_ANSI_ESCAPE = re.compile(r"\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
 
-# How many seconds to wait for the RC URL to appear in tmux output
+# Seconds to wait for the RC URL to appear in the log file
 _URL_WAIT_SECONDS = 30
-_POLL_INTERVAL = 0.5
+_POLL_INTERVAL = 0.3
 
 
-def _tmux_session_name(prefix: str, project: str) -> str:
-    # Replace characters that tmux treats as special in session names
-    safe = project.replace(":", "_").replace(".", "_")
-    return f"{prefix}{safe}"
+def _pid_alive(pid: int) -> bool:
+    """Return True if a process with *pid* is still running."""
+    try:
+        os.kill(pid, 0)
+        return True
+    except (ProcessLookupError, PermissionError):
+        return False
 
 
-def _session_exists(session_name: str) -> bool:
-    result = subprocess.run(
-        ["tmux", "has-session", "-t", session_name],
-        capture_output=True,
-    )
-    return result.returncode == 0
+def _strip_ansi(text: str) -> str:
+    return _ANSI_ESCAPE.sub("", text)
 
 
-def _capture_pane(session_name: str) -> str:
-    """Return the visible text of the first pane in the given tmux session."""
-    result = subprocess.run(
-        # -p: print to stdout; -S -: start from oldest history line
-        ["tmux", "capture-pane", "-pt", session_name, "-S", "-"],
-        capture_output=True,
-        text=True,
-    )
-    return result.stdout
+def _poll_log_for_url(log_path: Path, timeout: float) -> tuple[str | None, str]:
+    """
+    Poll *log_path* until an RC URL is found or *timeout* seconds elapse.
+    Returns (url_or_None, full_log_text).
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if log_path.exists():
+            text = log_path.read_text(errors="replace")
+            clean = _strip_ansi(text)
+            match = _RC_URL_PATTERN.search(clean)
+            if match:
+                return match.group(0), clean
+        time.sleep(_POLL_INTERVAL)
+    text = log_path.read_text(errors="replace") if log_path.exists() else ""
+    return None, _strip_ansi(text)
 
 
 def start_session(
     project: str,
     project_path: str,
     name: str,
-    prefix: str,
     db_path: str,
     yolo: bool = False,
 ) -> dict[str, Any]:
     """
-    Spawn ``claude remote-control`` for *project* inside a new tmux session.
-    Each call always creates a fresh session, allowing multiple concurrent sessions.
-    Blocks for up to _URL_WAIT_SECONDS waiting for the RC URL.
-
-    Returns a dict with keys: ``status``, ``rc_url`` (str | None), ``session_id`` (int | None), ``name`` (str).
+    Spawn `claude remote-control` via `script`. Blocks until URL is captured or timeout.
+    Returns dict with keys: status, rc_url, session_id, name.
     """
-    suffix = os.urandom(3).hex()
-    session_name = f"{_tmux_session_name(prefix, project)}-{suffix}"
-    logger.info("start_session: project={} session={} name={!r}", project, session_name, name)
+    db_dir = Path(db_path).parent
+    log_path = db_dir / f"session-{secrets.token_hex(6)}.log"
 
-    cmd = f"claude remote-control --spawn=session{' --permission-mode bypassPermissions' if yolo else ''}"
-    logger.info("spawning tmux session in {} cmd={!r}", project_path, cmd)
-    subprocess.run(
-        [
-            "tmux", "new-session",
-            "-d",               # detached
-            "-s", session_name,
-            "-c", project_path, # starting directory
-            cmd,
-        ],
-        check=True,
+    claude_cmd = "claude remote-control --spawn=session"
+    if yolo:
+        claude_cmd += " --permission-mode bypassPermissions"
+
+    cmd = ["script", "-q", "-e", "-f", "-c", claude_cmd, str(log_path)]
+    logger.info("start_session: project={} name={!r} log={}", project, name, log_path)
+
+    proc = subprocess.Popen(
+        cmd,
+        cwd=project_path,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,  # new session → independent of FastAPI restarts
     )
-    logger.info("tmux session created, waiting up to {}s for RC URL", _URL_WAIT_SECONDS)
+    logger.info("spawned script pid={}", proc.pid)
 
-    url = _wait_for_rc_url(session_name)
+    url, output = _poll_log_for_url(log_path, _URL_WAIT_SECONDS)
+
+    sid = db.create_session(
+        db_path, project, name, proc.pid, url, log_path=str(log_path)
+    )
+
     if url is None:
-        pane_text = _capture_pane(session_name)
-        logger.warning(
-            "timed out waiting for RC URL after {}s. Last pane output:\n{}",
-            _URL_WAIT_SECONDS,
-            pane_text.strip() or "(empty)",
-        )
-        sid = db.create_session(db_path, project, name, session_name, None)
-        db.end_session(db_path, sid, "timed_out", pane_text)
+        logger.warning("timed out waiting for RC URL. Log:\n{}", output.strip() or "(empty)")
+        db.end_session(db_path, sid, "timed_out", output or None)
         return {"status": "timed_out", "rc_url": None, "session_id": sid, "name": name}
 
     logger.info("RC URL captured: {}", url)
-    sid = db.create_session(db_path, project, name, session_name, url)
     return {"status": "running", "rc_url": url, "session_id": sid, "name": name}
 
 
-def list_running_sessions(project: str, prefix: str, db_path: str) -> list[dict[str, Any]]:
+def list_running_sessions(project: str, db_path: str) -> list[dict[str, Any]]:
     """
     Return all live running sessions for *project*.
-    Cross-checks DB records against actual tmux session existence;
-    stale records (tmux gone) are marked stopped automatically.
+    Auto-marks stale DB records (process gone) as stopped.
     """
     records = db.list_running_sessions(db_path, project)
     result = []
     for record in records:
-        tmux_name = record.get("tmux_session") or _tmux_session_name(prefix, project)
-        if _session_exists(tmux_name):
+        pid = record.get("pid")
+        if pid and _pid_alive(pid):
             result.append({
                 "id": record["id"],
                 "name": record["name"] or "",
@@ -126,138 +135,39 @@ def list_running_sessions(project: str, prefix: str, db_path: str) -> list[dict[
                 "status": "running",
             })
         else:
-            logger.debug("stale running record {} — tmux session gone, marking stopped", record["id"])
+            logger.debug("stale running record {} — pid {} gone, marking stopped", record["id"], pid)
             db.mark_session_stopped(db_path, record["id"])
     return result
 
 
 def kill_session(session_id: int, db_path: str) -> dict[str, Any]:
     """
-    Kill the tmux session for a specific session ID.
-    Captures a pane snapshot before killing and stores it in session_logs.
+    Terminate a session by SIGTERMing the script process group.
+    Reads the log file for a snapshot before cleaning up.
     """
     record = db.get_session_by_id(db_path, session_id)
     if not record:
         logger.warning("kill_session: session {} not found in DB", session_id)
         return {"status": "stopped"}
 
-    tmux_name = record.get("tmux_session")
-    logger.info("kill_session: id={} tmux={}", session_id, tmux_name)
+    pid = record.get("pid")
+    log_path_str = record.get("log_path")
+    snapshot: str | None = None
 
-    if tmux_name and _session_exists(tmux_name):
-        snapshot = _capture_pane(tmux_name)
-        subprocess.run(["tmux", "kill-session", "-t", tmux_name], check=True)
-        logger.info("tmux session {} killed", tmux_name)
-        db.end_session(db_path, session_id, "stopped", snapshot)
-    else:
-        db.mark_session_stopped(db_path, session_id)
+    if pid and _pid_alive(pid):
+        try:
+            # Kill the entire process group (script + claude child)
+            os.killpg(os.getpgid(pid), signal.SIGTERM)
+            # Give it a moment to flush the log
+            time.sleep(0.5)
+        except OSError:
+            pass
 
+    if log_path_str:
+        log_path = Path(log_path_str)
+        if log_path.exists():
+            snapshot = _strip_ansi(log_path.read_text(errors="replace"))
+
+    db.end_session(db_path, session_id, "stopped", snapshot)
+    logger.info("kill_session: id={} pid={}", session_id, pid)
     return {"status": "stopped"}
-
-
-def resume_session(
-    session_id: int,
-    project: str,
-    project_path: str,
-    name: str,
-    prefix: str,
-    db_path: str,
-    yolo: bool = False,
-) -> dict[str, Any]:
-    """
-    Spawn a new ``claude remote-control`` session that resumes the conversation
-    from a prior session.  The session ID is extracted from the stored rc_url;
-    if none is found we fall back to ``--resume`` without an explicit ID (which
-    resumes the most recent conversation in that project directory).
-    """
-    record = db.get_session_by_id(db_path, session_id)
-    if not record:
-        return {"status": "error", "detail": "session not found"}
-
-    # Extract Claude Code session ID from the rc_url, e.g.
-    #   https://claude.ai/code/session_01VG9LMVdzoPXv6FLKEk4Mwf  →  session_01VG9…
-    claude_session_id: str | None = None
-    rc_url = record.get("rc_url") or ""
-    match = re.search(r"/code/(session_[A-Za-z0-9]+)", rc_url)
-    if match:
-        claude_session_id = match.group(1)
-
-    resume_flag = f" --resume {claude_session_id}" if claude_session_id else " --resume"
-    yolo_flag = " --permission-mode bypassPermissions" if yolo else ""
-    cmd = f"claude remote-control --spawn=session{resume_flag}{yolo_flag}"
-
-    suffix = os.urandom(3).hex()
-    session_name = f"{_tmux_session_name(prefix, project)}-{suffix}"
-    logger.info("resume_session: prior_id={} project={} session={} cmd={!r}", session_id, project, session_name, cmd)
-
-    subprocess.run(
-        [
-            "tmux", "new-session",
-            "-d",
-            "-s", session_name,
-            "-c", project_path,
-            cmd,
-        ],
-        check=True,
-    )
-    logger.info("tmux session created for resume, waiting up to {}s for RC URL", _URL_WAIT_SECONDS)
-
-    url = _wait_for_rc_url(session_name)
-    if url is None:
-        pane_text = _capture_pane(session_name)
-        logger.warning("timed out waiting for RC URL on resume after {}s", _URL_WAIT_SECONDS)
-        sid = db.create_session(db_path, project, name, session_name, None)
-        db.end_session(db_path, sid, "timed_out", pane_text)
-        return {"status": "timed_out", "rc_url": None, "session_id": sid, "name": name}
-
-    logger.info("RC URL captured on resume: {}", url)
-    sid = db.create_session(db_path, project, name, session_name, url)
-    return {"status": "running", "rc_url": url, "session_id": sid, "name": name}
-
-
-def send_keys(project: str, prefix: str, db_path: str, text: str) -> bool:
-    """Send *text* to the most recently started active tmux session for *project*.
-
-    Returns True if keys were sent, False if no active session found.
-    """
-    records = db.list_running_sessions(db_path, project)
-    for record in records:
-        tmux_name = record.get("tmux_session") or _tmux_session_name(prefix, project)
-        if _session_exists(tmux_name):
-            subprocess.run(
-                ["tmux", "send-keys", "-t", tmux_name, text, "Enter"],
-                check=True,
-            )
-            logger.info("send_keys: project={} tmux={} text={!r}", project, tmux_name, text[:80])
-            return True
-    return False
-
-
-# ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
-
-def _extract_rc_url(session_name: str) -> str | None:
-    """Scan current pane output for an RC URL; return the first match or None."""
-    text = _capture_pane(session_name)
-    # The bridge token is long enough to wrap at narrow terminal widths.
-    # Join lines where a URL-safe character is followed immediately by a newline
-    # and then another URL-safe character (no spaces involved).
-    text = re.sub(r"(?<=[A-Za-z0-9_=-])\n(?=[A-Za-z0-9_=-])", "", text)
-    match = _RC_URL_PATTERN.search(text)
-    return match.group(0) if match else None
-
-
-def _wait_for_rc_url(session_name: str) -> str | None:
-    """
-    Poll pane output until the RC URL appears or the timeout expires.
-    Blocking — intentional: FastAPI sync route handlers run in a thread pool,
-    so this won't block the event loop.
-    """
-    deadline = time.monotonic() + _URL_WAIT_SECONDS
-    while time.monotonic() < deadline:
-        url = _extract_rc_url(session_name)
-        if url:
-            return url
-        time.sleep(_POLL_INTERVAL)
-    return None
