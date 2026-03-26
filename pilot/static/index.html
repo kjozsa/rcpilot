@@ -1446,10 +1446,11 @@
         return;
       }
       const next = data.next_fire ? data.next_fire.slice(11, 16) : '?';
-      pill.innerHTML = `<span class="ticker-dot"></span>⏱ <code style="font-size:.7rem">${escHtml(data.window_cron)}</code> → <span class="ticker-next">${next}</span>`;
+      const lastFired = data.last_fired_at ? data.last_fired_at.slice(11, 16) : null;
+      pill.innerHTML = `<span class="ticker-dot"></span>⏱ next window <span class="ticker-next">${next}</span>${lastFired ? ` · last ${lastFired}` : ''}`;
       pill.className = 'ticker-pill' + (data.last_fired_at ? ' fired' : '');
       pill.style.display = 'flex';
-      pill.title = data.last_fired_at ? `Last fired at ${data.last_fired_at}` : 'No fires yet this session';
+      pill.title = `Cron: ${data.window_cron}${data.last_fired_at ? ' · Last fired: ' + data.last_fired_at : ''}`;
     } catch (_) {}
   }
 
