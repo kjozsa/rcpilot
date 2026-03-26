@@ -1121,6 +1121,7 @@
         <td>
           <span class="status-badge status-${r.status}" style="font-size:.7rem;padding:.1rem .5rem">${escHtml(r.status)}</span>
           ${r.has_snapshot ? `<button class="btn-log" data-session-id="${r.id}" data-project="${escHtml(name)}" data-label="${escHtml(r.name || r.started_at.slice(0,10))}" title="View session log">≡</button>` : ''}
+          ${r.status !== 'running' ? `<button class="btn-continue" data-session-id="${r.id}" data-project="${escHtml(name)}" title="Resume session">▶</button>` : ''}
         </td>
       </tr>
     `).join('');

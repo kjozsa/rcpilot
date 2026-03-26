@@ -216,6 +216,22 @@ def start_session(
     )
 
 
+@app.post("/api/sessions/{project}/history/{session_id}/resume")
+def resume_session(
+    project: str,
+    session_id: int,
+    yolo: bool = Body(False, embed=True),
+) -> dict:
+    path = _get_project_path(project)
+    return session_mgr.resume_session(
+        session_id=session_id,
+        project=project,
+        project_path=path,
+        db_path=str(_config.db_path),
+        yolo=yolo,
+    )
+
+
 @app.get("/api/sessions/{project}/history")
 def get_history(project: str) -> list[dict]:
     """Return all past session records for *project*, newest first."""

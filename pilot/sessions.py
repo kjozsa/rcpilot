@@ -140,6 +140,25 @@ def list_running_sessions(project: str, db_path: str) -> list[dict[str, Any]]:
     return result
 
 
+def resume_session(
+    session_id: int,
+    project: str,
+    project_path: str,
+    db_path: str,
+    yolo: bool = False,
+) -> dict[str, Any]:
+    """
+    Start a new session as a continuation of a previous one.
+    Looks up the old session name and prefixes it with 'cont.' for the new session.
+    """
+    record = db.get_session_by_id(db_path, session_id)
+    if not record:
+        return {"status": "error", "rc_url": None, "session_id": None, "name": None}
+    old_name = record.get("name") or record.get("started_at", "")[:10]
+    new_name = f"cont. {old_name}"
+    return start_session(project, project_path, new_name, db_path, yolo=yolo)
+
+
 def kill_session(session_id: int, db_path: str) -> dict[str, Any]:
     """
     Terminate a session by SIGTERMing the script process group.
