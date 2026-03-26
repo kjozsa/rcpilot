@@ -157,7 +157,7 @@ def list_sessions(db_path: str, project: str) -> list[dict[str, Any]]:
             "SELECT s.*, "
             "(SELECT COUNT(*) FROM session_logs sl "
             " WHERE sl.session_id = s.id AND sl.role = 'snapshot') AS has_snapshot "
-            "FROM sessions s WHERE s.project = ? ORDER BY s.started_at DESC",
+            "FROM sessions s WHERE s.project = ? AND s.status != 'running' ORDER BY s.started_at DESC",
             (project,),
         ).fetchall()
     return [dict(r) for r in rows]
