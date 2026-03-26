@@ -282,6 +282,30 @@ def rename_session(
     return {"ok": True}
 
 
+@app.post("/api/sessions/{project}/history/{session_id}/resume")
+def resume_session(
+    project: str,
+    session_id: int,
+    name: str = Body("", embed=True),
+    yolo: bool = Body(False, embed=True),
+) -> dict:
+    """Start a new session that resumes the conversation from a prior session."""
+    path = _get_project_path(project)
+    record = pilot_db.get_session_by_id(str(_config.db_path), session_id)
+    if not record or record["project"] != project:
+        raise HTTPException(status_code=404, detail="Session not found")
+    resume_name = name.strip() or f"cont. {record.get('name') or record['started_at'][:16]}"
+    return session_mgr.resume_session(
+        session_id=session_id,
+        project=project,
+        project_path=path,
+        name=resume_name,
+        prefix=_config.tmux_session_prefix,
+        db_path=str(_config.db_path),
+        yolo=yolo,
+    )
+
+
 @app.post("/api/sessions/{project}/send")
 def send_to_session(
     project: str,

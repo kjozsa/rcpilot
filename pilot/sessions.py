@@ -155,6 +155,66 @@ def kill_session(session_id: int, db_path: str) -> dict[str, Any]:
     return {"status": "stopped"}
 
 
+def resume_session(
+    session_id: int,
+    project: str,
+    project_path: str,
+    name: str,
+    prefix: str,
+    db_path: str,
+    yolo: bool = False,
+) -> dict[str, Any]:
+    """
+    Spawn a new ``claude remote-control`` session that resumes the conversation
+    from a prior session.  The session ID is extracted from the stored rc_url;
+    if none is found we fall back to ``--resume`` without an explicit ID (which
+    resumes the most recent conversation in that project directory).
+    """
+    record = db.get_session_by_id(db_path, session_id)
+    if not record:
+        return {"status": "error", "detail": "session not found"}
+
+    # Extract Claude Code session ID from the rc_url, e.g.
+    #   https://claude.ai/code/session_01VG9LMVdzoPXv6FLKEk4Mwf  →  session_01VG9…
+    claude_session_id: str | None = None
+    rc_url = record.get("rc_url") or ""
+    match = re.search(r"/code/(session_[A-Za-z0-9]+)", rc_url)
+    if match:
+        claude_session_id = match.group(1)
+
+    resume_flag = f" --resume {claude_session_id}" if claude_session_id else " --resume"
+    yolo_flag = " --permission-mode bypassPermissions" if yolo else ""
+    cmd = f"claude remote-control --spawn=session{resume_flag}{yolo_flag}"
+
+    suffix = os.urandom(3).hex()
+    session_name = f"{_tmux_session_name(prefix, project)}-{suffix}"
+    logger.info("resume_session: prior_id={} project={} session={} cmd={!r}", session_id, project, session_name, cmd)
+
+    subprocess.run(
+        [
+            "tmux", "new-session",
+            "-d",
+            "-s", session_name,
+            "-c", project_path,
+            cmd,
+        ],
+        check=True,
+    )
+    logger.info("tmux session created for resume, waiting up to {}s for RC URL", _URL_WAIT_SECONDS)
+
+    url = _wait_for_rc_url(session_name)
+    if url is None:
+        pane_text = _capture_pane(session_name)
+        logger.warning("timed out waiting for RC URL on resume after {}s", _URL_WAIT_SECONDS)
+        sid = db.create_session(db_path, project, name, session_name, None)
+        db.end_session(db_path, sid, "timed_out", pane_text)
+        return {"status": "timed_out", "rc_url": None, "session_id": sid, "name": name}
+
+    logger.info("RC URL captured on resume: {}", url)
+    sid = db.create_session(db_path, project, name, session_name, url)
+    return {"status": "running", "rc_url": url, "session_id": sid, "name": name}
+
+
 def send_keys(project: str, prefix: str, db_path: str, text: str) -> bool:
     """Send *text* to the most recently started active tmux session for *project*.
 

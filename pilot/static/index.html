@@ -215,15 +215,17 @@
       inset: 0;
       background: rgba(0,0,0,.6);
       z-index: 100;
-      align-items: flex-end;
+      align-items: flex-start;
+      padding-top: 15vh;
     }
     #send-overlay.open { display: flex; }
 
     #send-sheet {
       background: var(--surface2);
-      border-top: 1px solid var(--border);
-      border-radius: var(--radius) var(--radius) 0 0;
-      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      width: calc(100% - 2rem);
+      margin: 0 1rem;
       padding: 1rem;
       display: flex;
       flex-direction: column;
@@ -495,6 +497,21 @@
     }
     tr:hover .btn-log { opacity: 1; }
     .btn-log:hover { color: var(--accent); opacity: 1 !important; }
+
+    .btn-continue {
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: .7rem;
+      padding: 0 .2rem;
+      cursor: pointer;
+      opacity: 0;
+      transition: opacity .15s;
+      vertical-align: middle;
+    }
+    tr:hover .btn-continue { opacity: 1; }
+    .btn-continue:hover { color: var(--green, #4caf50); opacity: 1 !important; }
+    .btn-continue:disabled { opacity: .4; cursor: default; }
 
     .name-input {
       background: var(--surface);
@@ -885,7 +902,9 @@
   function openNewSession(name) {
     _newSessionProject = name;
     document.getElementById('newsession-title').textContent = `New session — ${name}`;
+    const ts = new Date().toISOString().slice(0,16).replace('T',' ');
     document.getElementById('newsession-name').value = '';
+    document.getElementById('newsession-name').placeholder = ts;
     document.getElementById('newsession-overlay').classList.add('open');
     document.body.style.overflow = 'hidden';
     setTimeout(() => document.getElementById('newsession-name').focus(), 50);
@@ -899,8 +918,8 @@
   }
 
   async function submitNewSession() {
-    const sessionName = document.getElementById('newsession-name').value.trim();
-    if (!sessionName) { document.getElementById('newsession-name').focus(); return; }
+    const inp = document.getElementById('newsession-name');
+    const sessionName = inp.value.trim() || inp.placeholder;
     const project = _newSessionProject;
     const yolo = document.getElementById('yolo-global')?.checked ?? false;
     closeNewSession();
@@ -1055,6 +1074,7 @@
         <td>
           <span class="status-badge status-${r.status}" style="font-size:.7rem;padding:.1rem .5rem">${escHtml(r.status)}</span>
           ${r.has_snapshot ? `<button class="btn-log" data-session-id="${r.id}" data-project="${escHtml(name)}" data-label="${escHtml(r.name || r.started_at.slice(0,10))}" title="View session log">≡</button>` : ''}
+          ${r.status === 'stopped' && r.rc_url ? `<button class="btn-continue" data-session-id="${r.id}" data-project="${escHtml(name)}" title="Continue this session">▶</button>` : ''}
         </td>
       </tr>
     `).join('');
@@ -1075,6 +1095,9 @@
     });
     container.querySelectorAll('.btn-log').forEach(btn => {
       btn.addEventListener('click', () => showSnapshot(btn.dataset.project, +btn.dataset.sessionId, btn.dataset.label));
+    });
+    container.querySelectorAll('.btn-continue').forEach(btn => {
+      btn.addEventListener('click', () => continueSession(btn.dataset.project, +btn.dataset.sessionId, btn));
     });
 
   }
@@ -1295,6 +1318,33 @@
     const open = container.classList.toggle('open');
     const count = (historyCache[name] || []).length;
     toggle.textContent = (open ? '▾' : '▸') + ` History (${count})`;
+  }
+
+  async function continueSession(projectName, sessionId, btn) {
+    btn.disabled = true;
+    btn.textContent = '…';
+    try {
+      const res = await fetch(
+        `/api/sessions/${encodeURIComponent(projectName)}/history/${sessionId}/resume`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ yolo: document.getElementById('yolo-global')?.checked ?? false }),
+        }
+      );
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      if (data.rc_url) window.open(data.rc_url, '_blank');
+      await loadHistory(projectName);
+      await refreshStatus(projectName);
+    } catch (err) {
+      showError('Continue failed: ' + err.message);
+      btn.disabled = false;
+      btn.textContent = '▶';
+    }
   }
 
   async function clearHistory(name) {
