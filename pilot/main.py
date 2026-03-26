@@ -172,7 +172,11 @@ def review_pr(
     )
 
     result = subprocess.run(
-        ["claude", "-p", prompt],
+        [
+            "claude", "-p", prompt,
+            "--append-system-prompt",
+            "Respond directly and inline. Do not invoke any skills, agents, or external actions.",
+        ],
         cwd=path,
         capture_output=True,
         text=True,
