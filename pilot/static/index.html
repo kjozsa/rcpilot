@@ -39,8 +39,9 @@
     /* ── Header ──────────────────────────────────────────────────────── */
     header {
       display: flex;
-      flex-direction: column;
-      gap: .5rem;
+      align-items: center;
+      justify-content: space-between;
+      gap: .75rem;
       padding-bottom: var(--gap);
       border-bottom: 1px solid var(--border);
       margin-bottom: var(--gap);
@@ -768,18 +769,14 @@
 <body>
 
 <header>
-  <div style="display:flex;align-items:center;justify-content:space-between;width:100%">
-    <h1>rc<span>-</span>pilot <small id="version" style="font-size:.7rem;color:var(--muted);font-weight:400"></small></h1>
+  <h1>rc<span>-</span>pilot <small id="version" style="font-size:.7rem;color:var(--muted);font-weight:400"></small></h1>
+  <div style="display:flex;align-items:center;gap:.5rem">
     <div id="ticker-pill" class="ticker-pill" title="Usage window ticker" style="display:none"></div>
-  </div>
-  <div style="display:flex;align-items:center;justify-content:space-between;width:100%">
     <div class="sort-toggle">
       <button class="sort-btn" id="sort-modified" onclick="setSortOrder('modified')" title="Sort by recently modified">🕒</button>
       <button class="sort-btn" id="sort-alpha" onclick="setSortOrder('alpha')" title="Sort alphabetically">🔤</button>
     </div>
-    <div style="display:flex;align-items:center;gap:.75rem">
-      <label class="yolo-label"><input type="checkbox" id="yolo-global" checked> YOLO</label>
-    </div>
+    <label class="yolo-label"><input type="checkbox" id="yolo-global" checked> YOLO</label>
   </div>
 </header>
 
