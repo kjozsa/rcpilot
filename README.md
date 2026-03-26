@@ -1,8 +1,8 @@
-# claude-pilot
+# rcpilot
 
-> **Claude Code RC is powerful but ephemeral. claude-pilot gives it a home.**
+> **Claude Code RC is powerful but ephemeral. rcpilot gives it a home.**
 
-claude-pilot is a lightweight, self-hosted session manager for
+rcpilot is a lightweight, self-hosted session manager for
 [Claude Code Remote Control](https://docs.anthropic.com/en/docs/claude-code).
 Run it on a Raspberry Pi (or any always-on machine) and get a polished,
 mobile-friendly web UI to launch, manage, and reconnect to your coding sessions
@@ -13,7 +13,7 @@ from anywhere — phone, tablet, or browser.
 ## What it does
 
 Claude Code's Remote Control mode gives you a shareable session URL. That's great,
-but it has no persistence, no history, and no management layer. claude-pilot wraps
+but it has no persistence, no history, and no management layer. rcpilot wraps
 it with everything that's missing:
 
 - **Launch sessions** from any device via a clean web UI
@@ -30,7 +30,7 @@ it with everything that's missing:
 
 ---
 
-![claude-pilot on mobile](docs/screenshot.png)
+![rcpilot on mobile](docs/screenshot.png)
 
 ---
 
@@ -38,7 +38,7 @@ it with everything that's missing:
 
 ```bash
 git clone <repo>
-cd claude-pilot
+cd rcpilot
 uv run pilot
 ```
 
@@ -68,15 +68,15 @@ No app install needed.
 Each session runs `claude remote-control --spawn=session` inside `script`, which
 holds the PTY independently of the pilot server process. This means:
 
-- Restarting or crashing claude-pilot does **not** kill active Claude Code sessions
+- Restarting or crashing rcpilot does **not** kill active Claude Code sessions
 - Sessions persist across Pi reboots — if the RC process is still running, pilot reconnects to it
-- Session log files are written continuously to `~/.config/claude-pilot/` and captured as snapshots on end
+- Session log files are written continuously to `~/.config/rcpilot/` and captured as snapshots on end
 
 ---
 
 ## Configuration
 
-Create `~/.config/claude-pilot/config.toml` (or point `PILOT_CONFIG` at any path):
+Create `~/.config/rcpilot/config.toml` (or point `PILOT_CONFIG` at any path):
 
 ```toml
 # Directory scanned for projects — each immediate subdirectory becomes a project
@@ -87,7 +87,7 @@ host = "0.0.0.0"
 port = 8000
 
 # SQLite database path
-db_path = "~/.config/claude-pilot/pilot.db"
+db_path = "~/.config/rcpilot/pilot.db"
 ```
 
 All fields are optional — the defaults above apply when the file is absent.
@@ -109,15 +109,15 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 ```bash
 git clone <repo>
-cd claude-pilot
+cd rcpilot
 uv sync
 ```
 
 ### 3. Configure
 
 ```bash
-mkdir -p ~/.config/claude-pilot
-cat > ~/.config/claude-pilot/config.toml <<'EOF'
+mkdir -p ~/.config/rcpilot
+cat > ~/.config/rcpilot/config.toml <<'EOF'
 projects_dir = "~/projects"
 host = "0.0.0.0"
 port = 8000
@@ -131,7 +131,7 @@ curl -fsSL https://tailscale.com/install.sh | sh
 sudo tailscale up
 ```
 
-Then install Tailscale on your phone or laptop. Access claude-pilot at
+Then install Tailscale on your phone or laptop. Access rcpilot at
 `http://<pi-tailscale-hostname>:8000` from anywhere with no port forwarding needed.
 
 iOS Safari works great — the UI is designed for it.
@@ -140,7 +140,7 @@ iOS Safari works great — the UI is designed for it.
 
 ## Security note
 
-claude-pilot has no authentication in v0. It is designed to run on a trusted
+rcpilot has no authentication in v0. It is designed to run on a trusted
 private network (Tailscale, WireGuard, or local LAN only).
 
 **Do not expose port 8000 to the public internet.**

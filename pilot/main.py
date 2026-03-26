@@ -1,5 +1,5 @@
 """
-claude-pilot FastAPI application.
+rcpilot FastAPI application.
 
 Routes (all sync — FastAPI runs them in a thread pool):
   GET    /                                  → serve index.html
@@ -80,7 +80,7 @@ async def lifespan(app: FastAPI):  # type: ignore[type-arg]
     _thread.join(timeout=5)
 
 
-app = FastAPI(title="claude-pilot", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="rcpilot", version="0.1.0", lifespan=lifespan)
 
 app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 
@@ -100,7 +100,7 @@ def serve_index() -> FileResponse:
 
 @app.get("/api/info")
 def get_info() -> dict:
-    return {"version": pkg_version("claude-pilot")}
+    return {"version": pkg_version("rcpilot")}
 
 
 @app.get("/api/projects")
@@ -285,7 +285,7 @@ def delete_session(project: str, session_id: int) -> dict:
 def run() -> None:
     log_file = _config.db_path.parent / "pilot.log"
     logger.add(log_file, rotation="10 MB", retention=3, level="DEBUG")
-    logger.info("starting claude-pilot on {}:{}", _config.host, _config.port)
+    logger.info("starting rcpilot on {}:{}", _config.host, _config.port)
     logger.info("projects_dir={} db={} log={}", _config.projects_dir, _config.db_path, log_file)
     uvicorn.run(
         "pilot.main:app",

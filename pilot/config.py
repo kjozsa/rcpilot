@@ -1,7 +1,7 @@
 """
-Config loading for claude-pilot.
+Config loading for rcpilot.
 
-Reads from ~/.config/claude-pilot/config.toml by default, or from the path
+Reads from ~/.config/rcpilot/config.toml by default, or from the path
 specified by the PILOT_CONFIG environment variable.
 """
 
@@ -13,8 +13,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 _DEFAULT_CONFIG_TEMPLATE = """\
-# claude-pilot configuration
-# See https://github.com/your-org/claude-pilot for full documentation.
+# rcpilot configuration
+# See https://github.com/your-org/rcpilot for full documentation.
 
 # Directory scanned for projects — each immediate subdirectory is a project.
 projects_dir = "~/projects"
@@ -24,11 +24,11 @@ host = "0.0.0.0"
 port = 8000
 
 # SQLite database file path.
-db_path = "~/.config/claude-pilot/pilot.db"
+db_path = "~/.config/rcpilot/pilot.db"
 """
 
 
-DEFAULT_CONFIG_PATH = Path.home() / ".config" / "claude-pilot" / "config.toml"
+DEFAULT_CONFIG_PATH = Path.home() / ".config" / "rcpilot" / "config.toml"
 
 
 @dataclass
@@ -39,7 +39,7 @@ class Config:
     host: str = "0.0.0.0"
     port: int = 8000
     # SQLite database file path
-    db_path: Path = field(default_factory=lambda: Path.home() / ".config" / "claude-pilot" / "pilot.db")
+    db_path: Path = field(default_factory=lambda: Path.home() / ".config" / "rcpilot" / "pilot.db")
 
 
 def load_config(path: Path | None = None) -> Config:

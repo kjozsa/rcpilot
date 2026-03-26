@@ -1,8 +1,8 @@
-# claude-pilot Roadmap
+# rcpilot Roadmap
 
-> **Claude Code RC is powerful but ephemeral. claude-pilot gives it a home.**
+> **Claude Code RC is powerful but ephemeral. rcpilot gives it a home.**
 
-claude-pilot is a lightweight, self-hosted session manager for Claude Code Remote Control. It runs on a Raspberry Pi (or any always-on machine), gives you a mobile-friendly web UI to launch and reconnect to coding sessions, and adds the persistence and context continuity that RC currently lacks.
+rcpilot is a lightweight, self-hosted session manager for Claude Code Remote Control. It runs on a Raspberry Pi (or any always-on machine), gives you a mobile-friendly web UI to launch and reconnect to coding sessions, and adds the persistence and context continuity that RC currently lacks.
 
 **Design principles:**
 - Local-first, privacy-respecting — your code never leaves your machine
@@ -16,7 +16,7 @@ claude-pilot is a lightweight, self-hosted session manager for Claude Code Remot
 
 The skeleton. Enough to be useful on day one.
 
-- [x] FastAPI app scaffold, deployable via `uvx claude-pilot` or `uv tool install claude-pilot`
+- [x] FastAPI app scaffold, deployable via `uvx rcpilot` or `uv tool install rcpilot`
 - [x] Configurable projects directory (via `config.toml` or env vars)
 - [x] Project discovery — scans directory, lists projects in web UI
 - [x] Spawn `claude remote-control` for a selected project into a PTY session
@@ -86,7 +86,7 @@ Things worth considering but not yet committed to a phase:
 - `--spawn` server mode support for parallel sessions per project
 - Session diff view — what files changed during a session
 - MCP server config per project, auto-loaded when session starts
-- REST API for claude-pilot itself (enable other tooling to integrate)
+- REST API for rcpilot itself (enable other tooling to integrate)
 - Desktop companion app (stretch goal)
 
 ---
@@ -106,12 +106,12 @@ Things worth considering but not yet committed to a phase:
 
 ## Non-Goals
 
-To keep claude-pilot focused:
+To keep rcpilot focused:
 
-- **Not a cloud product** — claude-pilot assumes your machine is always on; cloud hosting is out of scope
-- **Not a full IDE** — the coding happens in RC; claude-pilot is the launcher and memory layer
+- **Not a cloud product** — rcpilot assumes your machine is always on; cloud hosting is out of scope
+- **Not a full IDE** — the coding happens in RC; rcpilot is the launcher and memory layer
 - **Not multi-tenant** — designed for a single developer's personal setup
-- **Not a RC replacement** — claude-pilot wraps RC, it doesn't reimplement it
+- **Not a RC replacement** — rcpilot wraps RC, it doesn't reimplement it
 
 ---
 

@@ -1,5 +1,5 @@
 """
-SQLite persistence for claude-pilot.
+SQLite persistence for rcpilot.
 
 Two layers:
   - async init_db()       — runs once at startup via FastAPI lifespan (aiosqlite)
