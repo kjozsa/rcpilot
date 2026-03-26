@@ -43,7 +43,7 @@ The thing RC fundamentally lacks: memory across sessions.
 - [x] `run-claude` endpoint — run `claude -p <prompt>` in project dir
 - [x] `review-pr` endpoint — fetch a GitHub PR via `gh` and review with Claude
 - [x] Git diff and git pull endpoints per project
-- [ ] "Resume" button — relaunch RC with last session context pre-loaded
+- [x] "Resume" button — relaunch RC with last session context pre-loaded
 
 ---
 
