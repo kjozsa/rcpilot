@@ -104,8 +104,8 @@ def get_info() -> dict:
 
 
 @app.get("/api/projects")
-def get_projects() -> list[dict]:
-    return list_projects(_config.projects_dir)  # type: ignore[return-value]
+def get_projects(sort_by: str = "modified") -> list[dict]:
+    return list_projects(_config.projects_dir, sort_by=sort_by)  # type: ignore[return-value]
 
 
 @app.get("/api/projects/{project}/git-diff")

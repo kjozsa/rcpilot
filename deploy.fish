@@ -17,4 +17,7 @@ rsync -av \
 echo "Reinstalling package on Pi ..."
 ssh $HOST "cd $REMOTE_DIR && uv pip install -e ."
 
-echo "Done. Run 'pilot' on the Pi to start."
+echo "Restarting pilot service ..."
+ssh $HOST "cd $REMOTE_DIR && fish restart.fish"
+
+echo "Done. Pilot restarted on $HOST."

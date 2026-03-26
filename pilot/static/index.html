@@ -208,6 +208,29 @@
     .btn-commit    { background: rgba(245,166,35,.1); color: var(--yellow); border: 1px solid rgba(245,166,35,.35); font-weight: normal; }
     .btn-commit:disabled { background: none; color: var(--muted); border-color: var(--border); }
 
+    /* ── Sort toggle buttons ─────────────────────────────────────────── */
+    .sort-toggle {
+      display: flex;
+      align-items: center;
+      gap: .25rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: .25rem;
+    }
+    .sort-btn {
+      background: none;
+      border: none;
+      color: var(--muted);
+      padding: .3rem .5rem;
+      font-size: .85rem;
+      cursor: pointer;
+      border-radius: 6px;
+      transition: all .15s;
+    }
+    .sort-btn:hover { color: var(--text); }
+    .sort-btn.active { background: var(--accent); color: #fff; }
+
     /* ── Commit & Push modal ─────────────────────────────────────────── */
     #send-overlay {
       display: none;
@@ -591,6 +614,7 @@
       padding: .4rem .5rem;
       font-size: .82rem;
       width: 70px;
+      appearance: textfield;
       -moz-appearance: textfield;
     }
     .pr-input::-webkit-outer-spin-button,
@@ -741,6 +765,10 @@
 <header>
   <h1>rc<span>-</span>pilot <small id="version" style="font-size:.7rem;color:var(--muted);font-weight:400"></small></h1>
   <div style="display:flex;align-items:center;gap:.75rem">
+    <div class="sort-toggle">
+      <button class="sort-btn" id="sort-modified" onclick="setSortOrder('modified')" title="Sort by recently modified">🕒</button>
+      <button class="sort-btn" id="sort-alpha" onclick="setSortOrder('alpha')" title="Sort alphabetically">🔤</button>
+    </div>
     <label class="yolo-label"><input type="checkbox" id="yolo-global" checked> YOLO</label>
     <button id="refresh-btn" onclick="loadProjects()">↺ Refresh</button>
   </div>
@@ -818,9 +846,11 @@
   // ── State ──────────────────────────────────────────────────────────────
   const sessionState = {};   // project name → array of running session objects
   const historyCache = {};   // project name → array of session records
+  let currentSortOrder = localStorage.getItem('projectSortOrder') || 'modified';
 
   // ── Bootstrap ──────────────────────────────────────────────────────────
   document.addEventListener('DOMContentLoaded', () => {
+    updateSortButtons();
     loadProjects();
     fetch('/api/info').then(r => r.json()).then(d => {
       document.getElementById('version').textContent = 'v' + d.version;
@@ -830,10 +860,22 @@
     });
   });
 
+  function setSortOrder(order) {
+    currentSortOrder = order;
+    localStorage.setItem('projectSortOrder', order);
+    updateSortButtons();
+    loadProjects();
+  }
+
+  function updateSortButtons() {
+    document.getElementById('sort-modified').classList.toggle('active', currentSortOrder === 'modified');
+    document.getElementById('sort-alpha').classList.toggle('active', currentSortOrder === 'alpha');
+  }
+
   async function loadProjects() {
     showError(null);
     try {
-      const res = await fetch('/api/projects');
+      const res = await fetch(`/api/projects?sort_by=${currentSortOrder}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const projects = await res.json();
 

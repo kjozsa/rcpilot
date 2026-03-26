@@ -46,18 +46,22 @@ def _git_branch(path: Path) -> str | None:
         return None
 
 
-def list_projects(projects_dir: Path) -> list[Project]:
+def list_projects(projects_dir: Path, sort_by: str = "modified") -> list[Project]:
     """
     Return one Project entry for every immediate subdirectory of *projects_dir*.
 
     Directories whose names start with '.' are silently skipped — they're
     typically tool-managed (e.g. .venv accidentally placed at the root).
+    
+    Args:
+        projects_dir: Directory containing project subdirectories
+        sort_by: Sort order - "modified" (most recent first) or "alpha" (A-Z)
     """
     if not projects_dir.exists():
         return []
 
     results: list[Project] = []
-    for entry in sorted(projects_dir.iterdir()):
+    for entry in projects_dir.iterdir():
         if not entry.is_dir():
             continue
         if entry.name.startswith("."):
@@ -74,4 +78,10 @@ def list_projects(projects_dir: Path) -> list[Project]:
             )
         )
 
+    # Sort based on preference
+    if sort_by == "alpha":
+        results.sort(key=lambda p: p["name"].lower())
+    else:  # "modified" or default
+        results.sort(key=lambda p: Path(p["path"]).stat().st_mtime, reverse=True)
+    
     return results
