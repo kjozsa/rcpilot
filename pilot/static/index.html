@@ -221,14 +221,7 @@
       color: var(--muted);
       white-space: nowrap;
     }
-    .ticker-pill .ticker-dot {
-      width: 6px; height: 6px;
-      border-radius: 50%;
-      background: var(--muted);
-      flex-shrink: 0;
-    }
-    .ticker-pill.fired .ticker-dot { background: var(--green); }
-    .ticker-pill .ticker-next { color: var(--text); font-weight: 500; }
+.ticker-pill .ticker-next { color: var(--text); font-weight: 500; }
 
     /* ── Sort toggle buttons ─────────────────────────────────────────── */
     .sort-toggle {
@@ -1447,7 +1440,7 @@
       }
       const next = data.next_fire ? data.next_fire.slice(11, 16) : '?';
       const lastFired = data.last_fired_at ? data.last_fired_at.slice(11, 16) : null;
-      pill.innerHTML = `<span class="ticker-dot"></span>⏱ next window <span class="ticker-next">${next}</span>${lastFired ? ` · last ${lastFired}` : ''}`;
+      pill.innerHTML = `⏱ next window <span class="ticker-next">${next}</span>${lastFired ? ` · last ${lastFired}` : ''}`;
       pill.className = 'ticker-pill' + (data.last_fired_at ? ' fired' : '');
       pill.style.display = 'flex';
       pill.title = `Cron: ${data.window_cron}${data.last_fired_at ? ' · Last fired: ' + data.last_fired_at : ''}`;
