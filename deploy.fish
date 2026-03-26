@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
 
 set HOST "pi@rpi5"
-set REMOTE_DIR "/home/pi/pilot/projects/claude-pilot"
+set REMOTE_DIR "/home/pi/pilot/projects/rcpilot"
 
 echo "Deploying to $HOST:$REMOTE_DIR ..."
 
