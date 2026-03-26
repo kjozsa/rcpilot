@@ -22,6 +22,7 @@ it with everything that's missing:
 - **Terminal snapshots** — captured on session end and browsable any time
 - **Multiple concurrent sessions** per project, all tracked independently
 - **YOLO mode** — one toggle to run sessions with `--permission-mode bypassPermissions`
+- **Usage window scheduler** — cron-based background job fires `claude -p "hi"` to start the 5-hour rolling usage window at configured times
 - **Session naming** — auto-named by timestamp, rename anything inline
 - **Git integration** — view diffs, pull, commit, and push without leaving the UI
 - **PR review** — trigger a full Claude code review on any open GitHub PR
@@ -88,9 +89,17 @@ port = 8000
 
 # SQLite database path
 db_path = "~/.config/rcpilot/pilot.db"
+
+# Usage window scheduler — fires "claude -p hi" on a cron schedule to start
+# the 5-hour rolling usage window (Pro/Max plans). Standard 5-field cron syntax.
+# Example: fire at 07:00 and 12:00 every day
+window_cron = "0 7,12 * * *"
 ```
 
 All fields are optional — the defaults above apply when the file is absent.
+
+The scheduler runs embedded in the app (no system cron needed). The next scheduled
+fire time is shown in the UI header. Supported cron syntax: `*`, `*/n`, `a-b`, `a,b,c`.
 
 ---
 

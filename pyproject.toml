@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "rcpilot"
-version = "0.5.1"
+version = "0.6.0"
 description = "Lightweight self-hosted session manager for Claude Code Remote Control"
 readme = "README.md"
 requires-python = ">=3.11"
