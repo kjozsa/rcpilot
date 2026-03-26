@@ -30,6 +30,10 @@ it with everything that's missing:
 
 ---
 
+![claude-pilot on mobile](docs/screenshot.png)
+
+---
+
 ## Quick start
 
 ```bash
