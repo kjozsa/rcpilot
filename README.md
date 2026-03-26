@@ -4,8 +4,29 @@
 
 claude-pilot is a lightweight, self-hosted session manager for
 [Claude Code Remote Control](https://docs.anthropic.com/en/docs/claude-code).
-Run it on a Raspberry Pi (or any always-on machine) and get a mobile-friendly
-web UI to launch, reconnect to, and manage your coding sessions from anywhere.
+Run it on a Raspberry Pi (or any always-on machine) and get a polished,
+mobile-friendly web UI to launch, manage, and reconnect to your coding sessions
+from anywhere — phone, tablet, or browser.
+
+---
+
+## What it does
+
+Claude Code's Remote Control mode gives you a shareable session URL. That's great,
+but it has no persistence, no history, and no management layer. claude-pilot wraps
+it with everything that's missing:
+
+- **Launch sessions** from any device via a clean web UI
+- **Reconnect** to running sessions — RC URLs are stored and always one tap away
+- **Full session history** per project — every session logged with start time, duration, and status
+- **Terminal snapshots** — captured on session end and browsable any time
+- **Multiple concurrent sessions** per project, all tracked independently
+- **YOLO mode** — one toggle to run sessions with `--permission-mode bypassPermissions`
+- **Session naming** — auto-named by timestamp, rename anything inline
+- **Git integration** — view diffs, pull, commit, and push without leaving the UI
+- **PR review** — trigger a full Claude code review on any open GitHub PR
+- **Watchdog** — background process monitor marks crashed or timed-out sessions automatically
+- **Sessions survive restarts** — the server can restart without killing active Claude sessions
 
 ---
 
@@ -17,8 +38,35 @@ cd claude-pilot
 uv run pilot
 ```
 
-The server starts on **http://0.0.0.0:8000** by default.
-Open that address in any browser on your local network (or VPN).
+Open **http://localhost:8000** in any browser. On a Pi, replace `localhost` with
+the Pi's IP or Tailscale hostname.
+
+---
+
+## The UI
+
+Each project gets a card showing:
+
+- Running sessions with their RC URL (tap to open in Claude Code)
+- Start a new session (optionally named, optionally in YOLO mode)
+- Kill a running session
+- Git branch, diff stat, pull button, diff viewer, commit & push flow
+- PR review launcher
+- Full session history with snapshot viewer and inline rename
+
+The UI is mobile-first with large tap targets — works well on iOS Safari and Android Chrome.
+No app install needed.
+
+---
+
+## Sessions survive restarts
+
+Each session runs `claude remote-control --spawn=session` inside `script`, which
+holds the PTY independently of the pilot server process. This means:
+
+- Restarting or crashing claude-pilot does **not** kill active Claude Code sessions
+- Sessions persist across Pi reboots — if the RC process is still running, pilot reconnects to it
+- Session log files are written continuously to `~/.config/claude-pilot/` and captured as snapshots on end
 
 ---
 
@@ -27,7 +75,7 @@ Open that address in any browser on your local network (or VPN).
 Create `~/.config/claude-pilot/config.toml` (or point `PILOT_CONFIG` at any path):
 
 ```toml
-# Directory scanned for projects — one subdirectory = one project
+# Directory scanned for projects — each immediate subdirectory becomes a project
 projects_dir = "~/projects"
 
 # Bind address; keep 0.0.0.0 for VPN / LAN access
@@ -42,7 +90,10 @@ All fields are optional — the defaults above apply when the file is absent.
 
 ---
 
-## Raspberry Pi setup (headless)
+## Raspberry Pi + Tailscale setup
+
+This is the intended deployment: a Pi that's always on, accessible from anywhere
+over a private VPN.
 
 ### 1. Install uv
 
@@ -50,7 +101,7 @@ All fields are optional — the defaults above apply when the file is absent.
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-### 2. Clone and install claude-pilot
+### 2. Clone and install
 
 ```bash
 git clone <repo>
@@ -58,7 +109,7 @@ cd claude-pilot
 uv sync
 ```
 
-### 3. Create your config
+### 3. Configure
 
 ```bash
 mkdir -p ~/.config/claude-pilot
@@ -69,86 +120,60 @@ port = 8000
 EOF
 ```
 
-### 4. Run as a systemd service (optional but recommended)
-
-```ini
-# /etc/systemd/system/claude-pilot.service
-[Unit]
-Description=claude-pilot session manager
-After=network.target
-
-[Service]
-ExecStart=/home/pi/claude-pilot/.venv/bin/pilot
-User=pi
-Restart=on-failure
-
-[Install]
-WantedBy=multi-user.target
-```
+### 4. Install Tailscale
 
 ```bash
-sudo systemctl enable --now claude-pilot
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up
 ```
+
+Then install Tailscale on your phone or laptop. Access claude-pilot at
+`http://<pi-tailscale-hostname>:8000` from anywhere with no port forwarding needed.
+
+iOS Safari works great — the UI is designed for it.
 
 ---
 
-## VPN access
+## Security note
 
-claude-pilot has no authentication in v0 — it's designed to be accessed over a
-trusted private network (e.g. Tailscale or WireGuard).
+claude-pilot has no authentication in v0. It is designed to run on a trusted
+private network (Tailscale, WireGuard, or local LAN only).
 
-**Recommended setup:**
-1. Install [Tailscale](https://tailscale.com) on your Pi and your phone/laptop.
-2. Access claude-pilot at `http://<pi-tailscale-ip>:8000` from anywhere.
-3. iOS Safari works fine — the UI is mobile-first with large tap targets.
+**Do not expose port 8000 to the public internet.**
 
-Do **not** expose port 8000 directly to the public internet without adding
-authentication (planned for Phase 3).
+Simple token-based auth is planned for Phase 3.
 
 ---
 
 ## Requirements
 
 - Python 3.11+
-- `script` (from `util-linux`) — standard on all Linux systems, no install needed
+- `script` (from `util-linux`) — standard on all Linux distros, no install needed
 - `claude` — Claude Code CLI, must be on `PATH` and authenticated
+- `gh` — GitHub CLI, only needed for PR review feature
 
 ---
 
-## How sessions work
+## Roadmap
 
-Each session runs `claude remote-control --spawn=session` inside the `script`
-command, which owns the PTY independently of the pilot server process. This means:
+| Phase | Status | Focus |
+|-------|--------|-------|
+| 0 — Foundation | ✅ done | Project discovery, web UI, session spawning |
+| 1 — Persistence | ✅ done | Session history, snapshots, watchdog, git & PR integration |
+| 2 — Context memory | 🔜 next | Claude API summarization, resume with injected context |
+| 3 — Polish | 💡 planned | Auth, PWA, PyPI publish, Docker, CI |
 
-- **Sessions survive pilot restarts** — stopping or restarting the server does
-  not kill active Claude Code sessions.
-- Session output is logged to `~/.config/claude-pilot/session-*.log` while
-  running, then stored in SQLite when the session ends.
+See [ROADMAP.md](ROADMAP.md) for details.
 
 ---
 
 ## Development
 
 ```bash
-git clone <repo>
-cd claude-pilot
 uv sync --extra dev
 uv run pytest
 uv run pilot
 ```
-
----
-
-## Roadmap
-
-See [ROADMAP.md](ROADMAP.md) for the full plan.
-
-| Phase | Status | Highlights |
-|-------|--------|-----------|
-| 0 — Foundation | ✅ done | Project discovery, web UI, session management |
-| 1 — Persistence | ✅ done | SQLite history, watchdog, naming, concurrent sessions, restart-safe PTY via `script` |
-| 2 — Context memory | 🔜 next | Claude API summarization, resume with context |
-| 3 — Polish | 💡 planned | Docker, auth, PWA, PyPI publish |
 
 ---
 
