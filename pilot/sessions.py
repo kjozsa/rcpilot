@@ -86,7 +86,7 @@ def start_session(
     db_dir = Path(db_path).parent
     log_path = db_dir / f"session-{secrets.token_hex(6)}.log"
 
-    claude_cmd = "claude remote-control --spawn=session"
+    claude_cmd = f"claude remote-control --spawn=session --name {name!r}"
     if yolo:
         claude_cmd += " --permission-mode bypassPermissions"
 
