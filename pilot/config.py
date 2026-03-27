@@ -28,8 +28,8 @@ db_path = "~/.config/rcpilot/pilot.db"
 
 # Claude usage window scheduler — fires "claude -p hi" on a cron schedule to
 # start the 5-hour rolling usage window (Pro/Max plans). Standard 5-field cron.
-# Example: window_cron = "0 7,12 * * *"   # fire at 07:00 and 12:00 daily
-window_cron = ""
+# Example: window_cron = "0 7,12,17 * * *"   # fire at 07:00, 12:00, and 17:00 daily
+window_cron = "0 7,12,17 * * *"
 """
 
 
