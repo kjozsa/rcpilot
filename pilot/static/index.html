@@ -39,15 +39,21 @@
     /* ── Header ──────────────────────────────────────────────────────── */
     header {
       display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: .75rem;
+      flex-direction: column;
+      gap: .4rem;
       padding-bottom: var(--gap);
       border-bottom: 1px solid var(--border);
       margin-bottom: var(--gap);
     }
+    #header-row1, #header-row2 {
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+    }
+    #header-row1 { justify-content: space-between; }
+    #header-row2 { justify-content: space-between; }
 
-    header h1 { font-size: 1.3rem; letter-spacing: .02em; }
+    header h1 { font-size: 1.3rem; letter-spacing: .02em; flex-shrink: 0; }
     header h1 span { color: var(--accent); }
 
 /* ── Project cards ───────────────────────────────────────────────── */
@@ -130,8 +136,19 @@
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      cursor: pointer;
     }
+
+    .btn-inline-rename {
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: .85rem;
+      padding: 0 .15rem;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: color .15s;
+    }
+    .btn-inline-rename:hover { color: var(--accent); }
     .session-label:active { opacity: .6; }
 
     .btn-open-session {
@@ -214,17 +231,7 @@
     .ticker-pill .ticker-next { color: var(--text); font-weight: 500; }
     @media (max-width: 480px) { .ticker-label { display: none; } }
 
-    /* ── Usage widget ────────────────────────────────────────────────── */
-    #usage-widget {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: .45rem .75rem;
-      display: flex;
-      align-items: center;
-      gap: .5rem;
-      margin-bottom: var(--gap);
-    }
+    /* ── Usage widget (inline in header row 1) ───────────────────────── */
     #usage-track {
       flex: 1;
       height: 6px;
@@ -257,12 +264,18 @@
       border-radius: var(--radius);
       padding: .25rem;
     }
+    .sort-label {
+      font-size: .75rem;
+      color: var(--muted);
+      padding: 0 .25rem 0 .1rem;
+      user-select: none;
+    }
     .sort-btn {
       background: none;
       border: none;
       color: var(--muted);
       padding: .3rem .5rem;
-      font-size: .85rem;
+      font-size: .78rem;
       cursor: pointer;
       border-radius: 6px;
       transition: all .15s;
@@ -597,6 +610,7 @@
     }
     tr:hover .btn-rename { opacity: 1; }
     .btn-rename:hover { color: var(--accent); opacity: 1 !important; }
+    @media (hover: none) { .btn-rename { opacity: 1; } }
 
     .btn-log {
       background: none;
@@ -611,6 +625,7 @@
     }
     tr:hover .btn-log { opacity: 1; }
     .btn-log:hover { color: var(--accent); opacity: 1 !important; }
+    @media (hover: none) { .btn-log { opacity: 1; } }
 
     .btn-continue {
       background: none;
@@ -625,6 +640,7 @@
     }
     tr:hover .btn-continue { opacity: 1; }
     .btn-continue:hover { color: var(--green, #4caf50); opacity: 1 !important; }
+    @media (hover: none) { .btn-continue { opacity: 1; } }
     .btn-continue:disabled { opacity: .4; cursor: default; }
 
     .name-input {
@@ -704,7 +720,7 @@
       border-radius: var(--radius);
       padding: .4rem .5rem;
       font-size: .82rem;
-      width: 70px;
+      width: calc(4ch + 1rem);
       appearance: textfield;
       -moz-appearance: textfield;
     }
@@ -854,27 +870,29 @@
 <body>
 
 <header>
-  <h1>rc<span>-</span>pilot <small id="version" style="font-size:.7rem;color:var(--muted);font-weight:400"></small></h1>
-  <div style="display:flex;align-items:center;gap:.5rem">
-    <div id="ticker-pill" class="ticker-pill" title="Usage window ticker" style="display:none"></div>
-    <div class="sort-toggle">
-      <button class="sort-btn" id="sort-modified" onclick="setSortOrder('modified')" title="Sort by recently modified">🕒</button>
-      <button class="sort-btn" id="sort-alpha" onclick="setSortOrder('alpha')" title="Sort alphabetically">🔤</button>
+  <div id="header-row1">
+    <h1>rc<span>-</span>pilot <small id="version" style="font-size:.7rem;color:var(--muted);font-weight:400"></small></h1>
+    <div id="usage-widget" style="display:none;flex:1;align-items:center;gap:.4rem;margin:0 .5rem">
+      <span id="usage-icon">⚡</span>
+      <span id="usage-window-label">5h</span>
+      <div id="usage-track">
+        <div id="usage-fill"></div>
+      </div>
+      <span id="usage-pct"></span>
     </div>
+    <div id="ticker-pill" class="ticker-pill" title="Usage window ticker" style="display:none"></div>
+  </div>
+  <div id="header-row2">
     <label class="yolo-label"><input type="checkbox" id="yolo-global" checked> YOLO</label>
+    <div class="sort-toggle">
+      <span class="sort-label">Sort:</span>
+      <button class="sort-btn" id="sort-modified" onclick="setSortOrder('modified')">Recent</button>
+      <button class="sort-btn" id="sort-alpha" onclick="setSortOrder('alpha')">A–Z</button>
+    </div>
   </div>
 </header>
 
 <div id="error-banner"></div>
-
-<section id="usage-widget" style="display:none">
-  <span id="usage-icon">⏱</span>
-  <span id="usage-window-label">5h</span>
-  <div id="usage-track">
-    <div id="usage-fill"></div>
-  </div>
-  <span id="usage-pct"></span>
-</section>
 
 <div id="project-list"></div>
 
@@ -972,6 +990,12 @@
     document.getElementById('newsession-name').addEventListener('keydown', e => {
       if (e.key === 'Enter') { e.preventDefault(); submitNewSession(); }
     });
+    document.getElementById('yolo-global').addEventListener('change', e => {
+      if (e.target.checked) {
+        const ok = confirm('Enable YOLO mode?\n\nThis enables --dangerously-skip-permissions: Claude can run any command without asking for approval. Use with care.');
+        if (!ok) e.target.checked = false;
+      }
+    });
   });
 
   function setSortOrder(order) {
@@ -1034,8 +1058,8 @@
       </div>
       ${project.has_git ? `
       <div class="git-row">
-        <input type="number" class="pr-input" placeholder="PR #" min="1" id="pr-input-${project.name}"><button class="btn-review-pr" onclick="openPRReview('${project.name}')">🔍 Review PR</button>
-        <button class="btn-commit" style="margin-left:auto" onclick="openCommitSend('${project.name}')" id="btn-commit-${project.name}">Push ⬆</button>
+        <input type="number" class="pr-input" placeholder="PR#" min="1" id="pr-input-${project.name}"><button class="btn-review-pr" onclick="openPRReview('${project.name}')">🔍 Review PR</button>
+        <button class="btn-commit" style="margin-left:auto" onclick="openCommitSend('${project.name}')" id="btn-commit-${project.name}">✨ Commit & Push</button>
       </div>` : ''}
       <div class="history-header">
         <button class="history-toggle" id="hist-toggle-${project.name}"
@@ -1129,7 +1153,7 @@
     if (!sessions || sessions.length === 0) { container.innerHTML = ''; return; }
     container.innerHTML = sessions.map(s => `
       <div class="session-row">
-        <span class="session-label" title="Tap to rename" onclick="startRunningSessionRename('${escHtml(name)}', ${s.id}, this)">${escHtml(s.name || 'unnamed')}</span>
+        <span class="session-label">${escHtml(s.name || 'unnamed')}</span><button class="btn-inline-rename" title="Rename" onclick="startRunningSessionRename('${escHtml(name)}', ${s.id}, this.previousElementSibling)">✎</button>
         ${s.rc_url ? `<a href="${escHtml(s.rc_url)}" target="_blank" rel="noopener" class="btn-open-session">Open ↗</a>` : ''}
         <button class="btn-kill-session" onclick="killSession('${escHtml(name)}', ${s.id})">💣 Kill</button>
       </div>
@@ -1552,7 +1576,7 @@
     const models  = data.models  || {};
     const utilization = windows['5h'];
     if (utilization === undefined) { widget.style.display = 'none'; return; }
-    widget.style.display = '';
+    widget.style.display = 'flex';
 
     const pct   = Math.round(utilization * 100);
     const fill  = document.getElementById('usage-fill');
@@ -1582,9 +1606,19 @@
         pill.style.display = 'none';
         return;
       }
-      const next = data.next_fire ? data.next_fire.slice(11, 16) : '?';
+      let remaining = '?';
+      if (data.next_fire) {
+        const diffMs = new Date(data.next_fire) - Date.now();
+        if (diffMs > 0) {
+          const totalMin = Math.round(diffMs / 60000);
+          const h = Math.floor(totalMin / 60), m = totalMin % 60;
+          remaining = h > 0 ? `${h}h ${m}m` : `${m}m`;
+        } else {
+          remaining = data.next_fire.slice(11, 16);
+        }
+      }
       const lastFired = data.last_fired_at ? data.last_fired_at.slice(11, 16) : null;
-      pill.innerHTML = `⏱ <span class="ticker-label">next window </span><span class="ticker-next">${next}</span>${lastFired ? ` · ${lastFired}` : ''}`;
+      pill.innerHTML = `⏱ <span class="ticker-label">resets in </span><span class="ticker-next">${remaining}</span>${lastFired ? ` · ${lastFired}` : ''}`;
       pill.className = 'ticker-pill' + (data.last_fired_at ? ' fired' : '');
       pill.style.display = 'flex';
       pill.style.cursor = 'pointer';
