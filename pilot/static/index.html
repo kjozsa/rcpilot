@@ -1790,8 +1790,7 @@
           remaining = data.next_fire.slice(11, 16);
         }
       }
-      const lastFired = data.last_fired_at ? data.last_fired_at.slice(11, 16) : null;
-      pill.innerHTML = `⏱ <span class="ticker-label">resets in </span><span class="ticker-next">${remaining}</span>${lastFired ? ` · ${lastFired}` : ''}`;
+      pill.innerHTML = `⏱ <span class="ticker-label">resets in </span><span class="ticker-next">${remaining}</span>`;
       pill.className = 'ticker-pill' + (data.last_fired_at ? ' fired' : '');
       pill.style.display = 'flex';
       pill.style.cursor = 'pointer';
