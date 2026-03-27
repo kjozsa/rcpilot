@@ -89,7 +89,7 @@ async def lifespan(app: FastAPI):  # type: ignore[type-arg]
     _tk_thread.join(timeout=5)
 
 
-app = FastAPI(title="rcpilot", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="rcpilot", version=pkg_version("rcpilot"), lifespan=lifespan)
 
 app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 
