@@ -9,6 +9,9 @@ if test "$HOSTNAME" = "rpi5"
     # Running locally on the server - deploy development version
     echo "Running locally on $HOSTNAME - deploying development version..."
     
+    echo "Stashing any local changes..."
+    git stash
+    
     echo "Pulling latest code..."
     git pull
     
@@ -21,6 +24,9 @@ if test "$HOSTNAME" = "rpi5"
 else
     # Running remotely - deploy via SSH
     echo "Running remotely - deploying to $HOST..."
+    
+    echo "Stashing any local changes on $HOST..."
+    ssh $HOST "cd $PROJECT_DIR && git stash"
     
     echo "Pulling latest code on $HOST..."
     ssh $HOST "cd $PROJECT_DIR && git pull"
