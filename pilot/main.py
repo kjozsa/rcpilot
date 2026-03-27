@@ -225,6 +225,73 @@ def git_pull(project: str) -> dict:
     }
 
 
+@app.post("/api/projects/import")
+def import_project(
+    repo_url: str = Body(..., embed=True),
+) -> dict:
+    """Clone a GitHub repository into the projects directory."""
+    import subprocess
+    import re
+    
+    # Validate GitHub URL format
+    if not repo_url:
+        raise HTTPException(status_code=422, detail="Repository URL is required")
+    
+    # Extract repo name from URL (e.g., https://github.com/user/repo.git -> repo)
+    match = re.search(r'/([^/]+?)(\.git)?$', repo_url.rstrip('/'))
+    if not match:
+        raise HTTPException(status_code=422, detail="Invalid repository URL format")
+    
+    repo_name = match.group(1)
+    target_path = _config.projects_dir / repo_name
+    
+    # Check if project already exists
+    if target_path.exists():
+        raise HTTPException(status_code=409, detail=f"Project '{repo_name}' already exists")
+    
+    # Ensure projects directory exists
+    _config.projects_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Clone the repository
+    try:
+        result = subprocess.run(
+            ["git", "clone", repo_url, str(target_path)],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        
+        if result.returncode != 0:
+            # Clean up partial clone if it failed
+            if target_path.exists():
+                import shutil
+                shutil.rmtree(target_path)
+            raise HTTPException(
+                status_code=500,
+                detail=f"Git clone failed: {result.stderr.strip() or result.stdout.strip()}"
+            )
+        
+        logger.info("imported project {} from {}", repo_name, repo_url)
+        return {
+            "success": True,
+            "project_name": repo_name,
+            "message": f"Successfully imported {repo_name}",
+        }
+    except subprocess.TimeoutExpired:
+        # Clean up partial clone
+        if target_path.exists():
+            import shutil
+            shutil.rmtree(target_path)
+        raise HTTPException(status_code=504, detail="Clone operation timed out")
+    except Exception as e:
+        # Clean up partial clone
+        if target_path.exists():
+            import shutil
+            shutil.rmtree(target_path)
+        logger.error("failed to import project: {}", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ---------------------------------------------------------------------------
 # Sessions
 # ---------------------------------------------------------------------------

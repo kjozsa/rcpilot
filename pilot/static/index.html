@@ -865,6 +865,105 @@
       font-size: .88rem;
       cursor: pointer;
     }
+
+    /* ── Import project modal ────────────────────────────────────────── */
+    #import-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.6);
+      z-index: 100;
+      align-items: flex-start;
+      padding-top: 15vh;
+    }
+    #import-overlay.open { display: flex; }
+
+    #import-sheet {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      width: calc(100% - 2rem);
+      max-width: 500px;
+      margin: 0 auto;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: .75rem;
+    }
+
+    #import-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    #import-title { font-size: .9rem; font-weight: 600; color: var(--text); }
+    #import-close {
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 1.3rem;
+      line-height: 1;
+      padding: .2rem .5rem;
+      cursor: pointer;
+    }
+    #import-close:hover { color: var(--text); opacity: 1; }
+
+    #import-url {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: .6rem .75rem;
+      font-size: .88rem;
+      font-family: ui-monospace, monospace;
+      width: 100%;
+    }
+    #import-url:focus { outline: none; border-color: var(--accent); }
+    #import-url::placeholder { color: var(--muted); }
+
+    #import-help {
+      font-size: .75rem;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
+    #import-footer {
+      display: flex;
+      gap: .5rem;
+      justify-content: flex-end;
+    }
+    #import-submit {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius);
+      padding: .5rem 1.25rem;
+      font-size: .88rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    #import-submit:disabled { opacity: .4; cursor: default; }
+    #import-cancel {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      border-radius: var(--radius);
+      padding: .5rem 1rem;
+      font-size: .88rem;
+      cursor: pointer;
+    }
+
+    .btn-import {
+      background: rgba(124,106,247,.15);
+      color: var(--accent);
+      border: 1px solid rgba(124,106,247,.4);
+      border-radius: var(--radius);
+      padding: .35rem .75rem;
+      font-size: .82rem;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+    }
   </style>
 </head>
 <body>
@@ -884,10 +983,13 @@
   </div>
   <div id="header-row2">
     <label class="yolo-label"><input type="checkbox" id="yolo-global" checked> YOLO</label>
-    <div class="sort-toggle">
-      <span class="sort-label">Sort:</span>
-      <button class="sort-btn" id="sort-modified" onclick="setSortOrder('modified')">Recent</button>
-      <button class="sort-btn" id="sort-alpha" onclick="setSortOrder('alpha')">A–Z</button>
+    <div style="display:flex;gap:.5rem;align-items:center">
+      <button class="btn-import" onclick="openImport()">+ Import from GitHub</button>
+      <div class="sort-toggle">
+        <span class="sort-label">Sort:</span>
+        <button class="sort-btn" id="sort-modified" onclick="setSortOrder('modified')">Recent</button>
+        <button class="sort-btn" id="sort-alpha" onclick="setSortOrder('alpha')">A–Z</button>
+      </div>
     </div>
   </div>
 </header>
@@ -965,6 +1067,22 @@
     <div id="newsession-footer">
       <button id="newsession-cancel" onclick="closeNewSession()">Cancel</button>
       <button id="newsession-submit" onclick="submitNewSession()">⚡ Connect</button>
+    </div>
+  </div>
+</div>
+<div id="import-overlay" onclick="closeImport(event)">
+  <div id="import-sheet">
+    <div id="import-header">
+      <span id="import-title">Import from GitHub</span>
+      <button id="import-close" onclick="closeImport()">✕</button>
+    </div>
+    <input type="text" id="import-url" placeholder="https://github.com/user/repo" />
+    <div id="import-help">
+      Enter a GitHub repository URL to clone it into your projects directory. The repository will be cloned and immediately available.
+    </div>
+    <div id="import-footer">
+      <button id="import-cancel" onclick="closeImport()">Cancel</button>
+      <button id="import-submit" onclick="submitImport()">Import</button>
     </div>
   </div>
 </div>
@@ -1704,8 +1822,62 @@
   }
 
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') { closeDiff(); closeSnapshot(); closeSend(); closePRReview(); closeNewSession(); closeTickerLog(); }
+    if (e.key === 'Escape') { closeDiff(); closeSnapshot(); closeSend(); closePRReview(); closeNewSession(); closeTickerLog(); closeImport(); }
   });
+
+  function openImport() {
+    document.getElementById('import-url').value = '';
+    document.getElementById('import-overlay').classList.add('open');
+    document.body.style.overflow = 'hidden';
+    setTimeout(() => document.getElementById('import-url').focus(), 100);
+  }
+
+  function closeImport(e) {
+    if (e && e.target !== document.getElementById('import-overlay')) return;
+    document.getElementById('import-overlay').classList.remove('open');
+    document.body.style.overflow = '';
+  }
+
+  async function submitImport() {
+    const url = document.getElementById('import-url').value.trim();
+    if (!url) {
+      showError('Please enter a GitHub repository URL');
+      return;
+    }
+
+    const btn = document.getElementById('import-submit');
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Importing…';
+    showError(null);
+
+    try {
+      const res = await fetch('/api/projects/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ repo_url: url }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
+      closeImport();
+      await loadProjects();
+      showError(null);
+    } catch (err) {
+      showError('Import failed: ' + err.message);
+      btn.disabled = false;
+      btn.textContent = originalText;
+    } finally {
+      if (!btn.disabled) {
+        btn.disabled = false;
+        btn.textContent = originalText;
+      }
+    }
+  }
 
   function colorDiff(text) {
     return text.split('\n').map(line => {
