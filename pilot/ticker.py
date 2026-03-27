@@ -97,6 +97,16 @@ def _next_fire(parsed: tuple, after: datetime) -> datetime:
     raise RuntimeError("no matching cron time found within 1 year")
 
 
+def _last_fire(parsed: tuple, before: datetime) -> datetime | None:
+    """Return the most recent datetime (minute precision) matching *parsed* before *before*."""
+    candidate = (before - timedelta(minutes=1)).replace(second=0, microsecond=0)
+    for _ in range(60 * 24 * 7):  # search back up to 7 days
+        if _matches(candidate, parsed):
+            return candidate
+        candidate -= timedelta(minutes=1)
+    return None  # no match found in last 7 days
+
+
 # ---------------------------------------------------------------------------
 # Scheduler loop
 # ---------------------------------------------------------------------------
@@ -120,7 +130,17 @@ def _ticker_loop(config: "Config", stop_event: threading.Event) -> None:
 
     with _state_lock:
         _state["window_cron"] = expr
-        _state["next_fire"] = _next_fire(parsed, datetime.now()).isoformat(timespec="minutes")
+        next_fire_dt = _next_fire(parsed, datetime.now())
+        _state["next_fire"] = next_fire_dt.isoformat(timespec="minutes")
+        # Calculate reset_at from most recent cron fire (for restarts mid-window)
+        # Find the most recent time the cron would have fired
+        last_fire_dt = _last_fire(parsed, datetime.now())
+        if last_fire_dt:
+            reset_dt = last_fire_dt + timedelta(hours=5)
+            if reset_dt > datetime.now():
+                _state["reset_at"] = reset_dt.isoformat(timespec="seconds")
+                _state["last_fired_at"] = last_fire_dt.isoformat(timespec="seconds")
+                logger.info("ticker: initialized reset_at={} from inferred last fire at {}", reset_dt, last_fire_dt)
 
     while not stop_event.wait(timeout=POLL_INTERVAL):
         now = datetime.now().replace(second=0, microsecond=0)
