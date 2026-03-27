@@ -1053,7 +1053,7 @@
       ${project.has_git ? (project.git_diff_stat ? `<div class="git-diff-stat" onclick="showDiff('${project.name}')">~ ${escHtml(project.git_diff_stat)}</div>` : '<div class="git-synced">✓ no local changes</div>') : ''}
       <div class="running-sessions" id="running-${project.name}"></div>
       <div class="action-row" id="actions-${project.name}">
-        <button class="btn-connect" onclick="openNewSession('${project.name}')" id="btn-connect-${project.name}">⚡ Connect</button>
+        <button class="btn-connect" onclick="openNewSession('${project.name}')" id="btn-connect-${project.name}">⚡ New Session</button>
         ${project.has_git ? `<button class="btn-pull" style="margin-left:auto" onclick="gitPull(this,'${project.name}')" id="btn-pull-${project.name}">Pull ⬇</button>` : ''}
       </div>
       ${project.has_git ? `
@@ -1120,7 +1120,7 @@
     } catch (err) {
       showError('Failed to start session: ' + err.message);
     } finally {
-      if (btn) { btn.disabled = false; btn.textContent = '⚡ Connect'; }
+      if (btn) { btn.disabled = false; btn.textContent = '⚡ New Session'; }
     }
   }
 
