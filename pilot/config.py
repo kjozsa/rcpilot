@@ -21,7 +21,7 @@ projects_dir = "{projects_dir}"
 
 # Uvicorn bind host; 0.0.0.0 makes it reachable over a VPN.
 host = "0.0.0.0"
-port = 8000
+port = {port}
 
 # SQLite database file path.
 db_path = "~/.config/rcpilot/pilot.db"
@@ -49,13 +49,19 @@ class Config:
     window_cron: str = ""
 
 
-def _prompt_projects_dir() -> str:
-    default = "~/projects"
+def _prompt_first_run() -> tuple[str, int]:
+    defaults = ("~/projects", 8000)
     try:
-        answer = input(f"Projects directory [{default}]: ").strip()
+        projects = input(f"Projects directory [{defaults[0]}]: ").strip()
+        port_str = input(f"Port [{defaults[1]}]: ").strip()
     except (EOFError, KeyboardInterrupt):
-        answer = ""
-    return answer or default
+        return defaults
+    projects = projects or defaults[0]
+    try:
+        port = int(port_str) if port_str else defaults[1]
+    except ValueError:
+        port = defaults[1]
+    return projects, port
 
 
 def load_config(path: Path | None = None) -> Config:
@@ -68,12 +74,12 @@ def load_config(path: Path | None = None) -> Config:
         path = Path(env_path) if env_path else DEFAULT_CONFIG_PATH
 
     if not path.exists():
-        projects_dir = _prompt_projects_dir()
+        projects_dir, port = _prompt_first_run()
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(_DEFAULT_CONFIG_TEMPLATE.format(projects_dir=projects_dir))
+        path.write_text(_DEFAULT_CONFIG_TEMPLATE.format(projects_dir=projects_dir, port=port))
         from loguru import logger
-        logger.info("created config at {} with projects_dir={}", path, projects_dir)
-        return Config(projects_dir=Path(projects_dir).expanduser())
+        logger.info("created config at {} with projects_dir={} port={}", path, projects_dir, port)
+        return Config(projects_dir=Path(projects_dir).expanduser(), port=port)
 
     with open(path, "rb") as fh:
         raw = tomllib.load(fh)
