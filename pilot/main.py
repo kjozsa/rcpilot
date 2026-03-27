@@ -17,6 +17,7 @@ Routes (all sync — FastAPI runs them in a thread pool):
 
 from __future__ import annotations
 
+import datetime
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -212,12 +213,20 @@ def git_pull(project: str) -> dict:
     import subprocess
     path = _get_project_path(project)
     result = subprocess.run(
-        ["git", "pull"],
+        ["git", "pull", "--rebase"],
         cwd=path,
         capture_output=True,
         text=True,
         timeout=30,
     )
+    if result.returncode != 0:
+        # Abort the rebase to leave the repo in a clean state
+        subprocess.run(
+            ["git", "rebase", "--abort"],
+            cwd=path,
+            capture_output=True,
+            timeout=10,
+        )
     return {
         "returncode": result.returncode,
         "stdout": result.stdout.strip(),
@@ -311,10 +320,12 @@ def start_session(
     yolo: bool = Body(False, embed=True),
 ) -> dict:
     path = _get_project_path(project)
+    ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    session_name = f"{project} - {name}" if name else ts
     return session_mgr.start_session(
         project=project,
         project_path=path,
-        name=f"{project} - {name}",
+        name=session_name,
         db_path=str(_config.db_path),
         yolo=yolo,
         proxy_url=_proxy_url(),

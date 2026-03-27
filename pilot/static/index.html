@@ -574,6 +574,7 @@
 
     #diff-body {
       overflow-y: auto;
+      overflow-x: auto;
       -webkit-overflow-scrolling: touch;
       padding: .75rem 1rem;
       flex: 1;
@@ -977,14 +978,32 @@
     #send-sheet       { max-width: 560px; margin: 0 auto; }
 
     /* Bottom-sheet modals: cap width, center, add side borders */
-    #ticker-overlay, #diff-overlay, #snapshot-overlay, #pr-review-overlay {
+    #ticker-overlay, #snapshot-overlay, #pr-review-overlay {
       justify-content: center;
     }
-    #ticker-sheet, #diff-sheet, #snapshot-sheet, #pr-review-sheet {
+    #ticker-sheet, #snapshot-sheet, #pr-review-sheet {
       max-width: 860px;
       width: 100%;
       border-left: 1px solid var(--border);
       border-right: 1px solid var(--border);
+    }
+
+    /* Diff: centered dialog on desktop with more room */
+    #diff-overlay {
+      justify-content: center;
+      align-items: center;
+      padding: 2rem;
+    }
+    #diff-sheet {
+      max-width: 960px;
+      width: 100%;
+      max-height: 85vh;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      border-top: 1px solid var(--border);
+    }
+    #diff-body pre {
+      font-size: .82rem;
     }
   }
   </style>
@@ -1240,7 +1259,7 @@
 
   async function submitNewSession() {
     const inp = document.getElementById('newsession-name');
-    const sessionName = inp.value.trim() || inp.placeholder;
+    const sessionName = inp.value.trim();
     const project = _newSessionProject;
     const yolo = document.getElementById('yolo-global')?.checked ?? false;
     closeNewSession();
@@ -1716,8 +1735,7 @@
     const widget  = document.getElementById('usage-widget');
     const windows = data.windows || {};
     const models  = data.models  || {};
-    const utilization = windows['5h'];
-    if (utilization === undefined) { widget.style.display = 'none'; return; }
+    const utilization = windows['5h'] ?? 0;
     widget.style.display = 'flex';
 
     const pct   = Math.round(utilization * 100);
