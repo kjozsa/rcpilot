@@ -1,11 +1,35 @@
 #!/usr/bin/env fish
 
 set HOST "pi@rpi5"
+set PROJECT_DIR "/home/pi/pilot/projects/rcpilot"
 
-echo "Upgrading rcpilot on $HOST ..."
-ssh $HOST "uv tool upgrade rcpilot"
-
-echo "Restarting service on $HOST ..."
-ssh $HOST "systemctl --user restart rcpilot && systemctl --user status rcpilot --no-pager"
+# Detect if we're running on the server or remotely
+set HOSTNAME (hostname)
+if test "$HOSTNAME" = "rpi5"
+    # Running locally on the server - deploy development version
+    echo "Running locally on $HOSTNAME - deploying development version..."
+    
+    echo "Pulling latest code..."
+    git pull
+    
+    echo "Syncing dependencies..."
+    uv sync
+    
+    echo "Restarting service..."
+    systemctl --user restart rcpilot
+    systemctl --user status rcpilot --no-pager
+else
+    # Running remotely - deploy via SSH
+    echo "Running remotely - deploying to $HOST..."
+    
+    echo "Pulling latest code on $HOST..."
+    ssh $HOST "cd $PROJECT_DIR && git pull"
+    
+    echo "Syncing dependencies on $HOST..."
+    ssh $HOST "cd $PROJECT_DIR && uv sync"
+    
+    echo "Restarting service on $HOST..."
+    ssh $HOST "systemctl --user restart rcpilot && systemctl --user status rcpilot --no-pager"
+end
 
 echo "Done."

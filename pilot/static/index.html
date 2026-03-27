@@ -954,15 +954,20 @@
     }
 
     .btn-import {
-      background: rgba(124,106,247,.15);
-      color: var(--accent);
-      border: 1px solid rgba(124,106,247,.4);
+      background: rgba(62,207,142,.15);
+      color: var(--green);
+      border: 1px solid rgba(62,207,142,.4);
       border-radius: var(--radius);
-      padding: .35rem .75rem;
-      font-size: .82rem;
-      font-weight: 600;
+      padding: .35rem .6rem;
+      font-size: 1.2rem;
+      font-weight: 900;
       cursor: pointer;
       white-space: nowrap;
+      line-height: 1;
+    }
+    .btn-import::before {
+      content: '+';
+      font-weight: 900;
     }
 
   /* ── Desktop refinements ─────────────────────────────────────────── */
@@ -1002,7 +1007,7 @@
   <div id="header-row2">
     <label class="yolo-label"><input type="checkbox" id="yolo-global" checked> YOLO</label>
     <div style="display:flex;gap:.5rem;align-items:center">
-      <button class="btn-import" onclick="openImport()">+ Import from GitHub</button>
+      <button class="btn-import" onclick="openImport()" title="Import from GitHub"></button>
       <div class="sort-toggle">
         <span class="sort-label">Sort:</span>
         <button class="sort-btn" id="sort-modified" onclick="setSortOrder('modified')">Recent</button>
@@ -1091,7 +1096,7 @@
 <div id="import-overlay" onclick="closeImport(event)">
   <div id="import-sheet">
     <div id="import-header">
-      <span id="import-title">Import from GitHub</span>
+      <span id="import-title">Import project from GitHub</span>
       <button id="import-close" onclick="closeImport()">✕</button>
     </div>
     <input type="text" id="import-url" placeholder="https://github.com/user/repo" />
