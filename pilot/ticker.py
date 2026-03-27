@@ -133,17 +133,21 @@ def _ticker_loop(config: "Config", stop_event: threading.Event) -> None:
 
 
 def _fire(config: "Config", now: datetime) -> None:
+    import os
     label = now.strftime("%H:%M")
     logger.info("ticker: firing cron job at {}", label)
     ok = False
     detail = ""
     try:
+        env = os.environ.copy()
+        env["ANTHROPIC_BASE_URL"] = f"http://127.0.0.1:{config.port}/proxy"
         result = subprocess.run(
             ["claude", "-p", "hi"],
             cwd=str(config.projects_dir),
             capture_output=True,
             text=True,
             timeout=60,
+            env=env,
         )
         ok = result.returncode == 0
         detail = result.stderr.strip() if not ok else ""

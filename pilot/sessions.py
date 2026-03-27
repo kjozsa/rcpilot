@@ -78,6 +78,7 @@ def start_session(
     name: str,
     db_path: str,
     yolo: bool = False,
+    proxy_url: str | None = None,
 ) -> dict[str, Any]:
     """
     Spawn `claude remote-control` via `script`. Blocks until URL is captured or timeout.
@@ -93,9 +94,15 @@ def start_session(
     cmd = ["script", "-q", "-e", "-f", "-c", claude_cmd, str(log_path)]
     logger.info("start_session: project={} name={!r} log={}", project, name, log_path)
 
+    env = None
+    if proxy_url:
+        env = os.environ.copy()
+        env["ANTHROPIC_BASE_URL"] = proxy_url
+
     proc = subprocess.Popen(
         cmd,
         cwd=project_path,
+        env=env,
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
@@ -146,6 +153,7 @@ def resume_session(
     project_path: str,
     db_path: str,
     yolo: bool = False,
+    proxy_url: str | None = None,
 ) -> dict[str, Any]:
     """
     Start a new session as a continuation of a previous one.
@@ -156,7 +164,7 @@ def resume_session(
         return {"status": "error", "rc_url": None, "session_id": None, "name": None}
     old_name = record.get("name") or record.get("started_at", "")[:10]
     new_name = f"cont. {old_name}"
-    return start_session(project, project_path, new_name, db_path, yolo=yolo)
+    return start_session(project, project_path, new_name, db_path, yolo=yolo, proxy_url=proxy_url)
 
 
 def kill_session(session_id: int, db_path: str) -> dict[str, Any]:

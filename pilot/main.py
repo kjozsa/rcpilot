@@ -21,8 +21,8 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import uvicorn
-from fastapi import Body, FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi import Body, FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from loguru import logger
 
@@ -31,6 +31,7 @@ from importlib.metadata import version as pkg_version
 from pilot.config import Config, load_config
 from pilot.projects import list_projects
 from pilot import db as pilot_db
+from pilot import proxy as pilot_proxy
 from pilot import sessions as session_mgr
 from pilot.watchdog import start_watchdog
 from pilot.ticker import start_ticker, get_ticker_state
@@ -109,6 +110,22 @@ def get_info() -> dict:
     return {"version": pkg_version("rcpilot")}
 
 
+def _proxy_url() -> str:
+    return f"http://127.0.0.1:{_config.port}/proxy"
+
+
+@app.api_route("/proxy/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"])
+async def anthropic_proxy(request: Request, path: str) -> StreamingResponse:
+    """Transparent proxy to api.anthropic.com — captures usage stats."""
+    return await pilot_proxy.handle(request, path)
+
+
+@app.get("/api/stats")
+def get_stats() -> dict:
+    """Return current Anthropic usage stats captured by the proxy."""
+    return pilot_proxy.get_stats()
+
+
 @app.get("/api/ticker")
 def get_ticker() -> dict:
     """Return window ticker state: configured times, last fired, next window."""
@@ -140,14 +157,18 @@ def run_claude(
     prompt: str = Body(..., embed=True),
 ) -> dict:
     """Run ``claude -p <prompt>`` in the project directory and return the output."""
+    import os
     import subprocess
     path = _get_project_path(project)
+    env = os.environ.copy()
+    env["ANTHROPIC_BASE_URL"] = _proxy_url()
     result = subprocess.run(
         ["claude", "-p", prompt],
         cwd=path,
         capture_output=True,
         text=True,
         timeout=300,
+        env=env,
     )
     return {
         "output": result.stdout.strip(),
@@ -167,13 +188,17 @@ def review_pr(
     launch the claude process detached and return immediately rather than
     waiting up to several minutes for it to finish.
     """
+    import os
     import subprocess
     path = _get_project_path(project)
+    env = os.environ.copy()
+    env["ANTHROPIC_BASE_URL"] = _proxy_url()
     subprocess.Popen(
         ["claude", "-p", f"/code-review:code-review {pr_number}"],
         cwd=path,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
+        env=env,
     )
     return {
         "review": f"Review started for PR #{pr_number}. Results will be posted as a comment on the GitHub PR.",
@@ -225,6 +250,7 @@ def start_session(
         name=name,
         db_path=str(_config.db_path),
         yolo=yolo,
+        proxy_url=_proxy_url(),
     )
 
 
@@ -241,6 +267,7 @@ def resume_session(
         project_path=path,
         db_path=str(_config.db_path),
         yolo=yolo,
+        proxy_url=_proxy_url(),
     )
 
 

@@ -214,6 +214,39 @@
     .ticker-pill .ticker-next { color: var(--text); font-weight: 500; }
     @media (max-width: 480px) { .ticker-label { display: none; } }
 
+    /* ── Usage widget ────────────────────────────────────────────────── */
+    #usage-widget {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: .45rem .75rem;
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+      margin-bottom: var(--gap);
+    }
+    #usage-track {
+      flex: 1;
+      height: 6px;
+      background: var(--surface2);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    #usage-fill {
+      height: 100%;
+      display: flex;
+      width: 0%;
+      transition: width .5s ease;
+    }
+    .model-segment { height: 100%; }
+    .model-seg-opus    { background: #a78bfa; }
+    .model-seg-sonnet  { background: #60a5fa; }
+    .model-seg-haiku   { background: #34d399; }
+    .model-seg-other   { background: var(--muted); }
+    #usage-icon         { font-size: .75rem; flex-shrink: 0; }
+    #usage-window-label { font-size: .72rem; color: var(--muted); flex-shrink: 0; }
+    #usage-pct          { font-size: .72rem; color: var(--text); font-weight: 500; flex-shrink: 0; }
+
     /* ── Sort toggle buttons ─────────────────────────────────────────── */
     .sort-toggle {
       display: flex;
@@ -833,6 +866,16 @@
 </header>
 
 <div id="error-banner"></div>
+
+<section id="usage-widget" style="display:none">
+  <span id="usage-icon">⏱</span>
+  <span id="usage-window-label">5h</span>
+  <div id="usage-track">
+    <div id="usage-fill"></div>
+  </div>
+  <span id="usage-pct"></span>
+</section>
+
 <div id="project-list"></div>
 
 <div id="ticker-overlay" onclick="closeTickerLog(event)">
@@ -924,6 +967,8 @@
     });
     loadTicker();
     setInterval(loadTicker, 60_000);
+    loadStats();
+    setInterval(loadStats, 30_000);
     document.getElementById('newsession-name').addEventListener('keydown', e => {
       if (e.key === 'Enter') { e.preventDefault(); submitNewSession(); }
     });
@@ -1477,6 +1522,54 @@
       await loadHistory(name);
     } catch (err) {
       showError('Clear failed: ' + err.message);
+    }
+  }
+
+  // ── Usage stats ─────────────────────────────────────────────────────────
+  async function loadStats() {
+    try {
+      const data = await fetch('/api/stats').then(r => r.json());
+      renderStats(data);
+    } catch (e) { /* ignore — proxy may not have data yet */ }
+  }
+
+  function _barClass(pct) {
+    if (pct >= 80) return 'high';
+    if (pct >= 50) return 'medium';
+    return 'low';
+  }
+
+  function _modelShort(name) {
+    if (name.includes('opus'))   return 'opus';
+    if (name.includes('sonnet')) return 'sonnet';
+    if (name.includes('haiku'))  return 'haiku';
+    return name.split('-').pop();
+  }
+
+  function renderStats(data) {
+    const widget  = document.getElementById('usage-widget');
+    const windows = data.windows || {};
+    const models  = data.models  || {};
+    const utilization = windows['5h'];
+    if (utilization === undefined) { widget.style.display = 'none'; return; }
+    widget.style.display = '';
+
+    const pct   = Math.round(utilization * 100);
+    const fill  = document.getElementById('usage-fill');
+    const label = document.getElementById('usage-pct');
+    label.textContent = `${pct}%`;
+    fill.style.width = `${pct}%`;
+
+    const total = Object.values(models).reduce((a, b) => a + b, 0);
+    if (total > 0) {
+      fill.innerHTML = Object.entries(models)
+        .sort((a, b) => b[1] - a[1])
+        .map(([m, n]) => {
+          const share = (n / total * 100).toFixed(1);
+          return `<div class="model-segment model-seg-${_modelShort(m)}" style="width:${share}%" title="${_modelShort(m)} ${Math.round(share)}%"></div>`;
+        }).join('');
+    } else {
+      fill.innerHTML = `<div class="model-segment model-seg-sonnet" style="width:100%"></div>`;
     }
   }
 
