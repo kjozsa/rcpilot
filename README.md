@@ -37,14 +37,47 @@ it with everything that's missing:
 
 ## Quick start
 
+### One-shot demo (no install)
+
+Try it immediately with no installation:
+
 ```bash
-git clone <repo>
-cd rcpilot
-uv run pilot
+uvx rcpilot
 ```
 
-Open **http://localhost:8000** in any browser. On a Pi, replace `localhost` with
-the Pi's IP or Tailscale hostname.
+Open **http://localhost:8000** in your browser. Config is auto-created at
+`~/.config/rcpilot/config.toml` on first run.
+
+### Persistent install
+
+For a machine you want to run rcpilot on permanently:
+
+```bash
+uv tool install rcpilot
+```
+
+This puts `rcpilot` on your `PATH`. Run it manually:
+
+```bash
+rcpilot
+```
+
+Or set it up as a systemd service so it starts on boot and restarts on crash:
+
+```bash
+# Download the unit file
+curl -o ~/.config/systemd/user/rcpilot.service \
+  https://raw.githubusercontent.com/kjozsa/rcpilot/main/rcpilot.service
+
+# Enable and start
+systemctl --user enable --now rcpilot
+
+# Check status / logs
+systemctl --user status rcpilot
+journalctl --user -u rcpilot -f
+```
+
+On a Pi, replace `localhost` with the Pi's IP or Tailscale hostname.
 
 ---
 
@@ -114,12 +147,10 @@ over a private VPN.
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-### 2. Clone and install
+### 2. Install rcpilot
 
 ```bash
-git clone <repo>
-cd rcpilot
-uv sync
+uv tool install rcpilot
 ```
 
 ### 3. Configure
@@ -185,7 +216,7 @@ See [ROADMAP.md](ROADMAP.md) for details.
 ```bash
 uv sync --extra dev
 uv run pytest
-uv run pilot
+uv run rcpilot
 ```
 
 ---
