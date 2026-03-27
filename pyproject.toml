@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "rcpilot"
-version = "0.7.0"
+version = "0.7.1"
 description = "Lightweight self-hosted session manager for Claude Code Remote Control"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -46,7 +46,7 @@ Documentation = "https://github.com/kjozsa/rcpilot#readme"
 
 [project.scripts]
 # `uvx rcpilot` or `uv tool install rcpilot` → runs this entry point
-pilot = "pilot.main:run"
+rcpilot = "pilot.main:run"
 
 [project.optional-dependencies]
 dev = [
