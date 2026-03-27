@@ -14,10 +14,10 @@ from pathlib import Path
 
 _DEFAULT_CONFIG_TEMPLATE = """\
 # rcpilot configuration
-# See https://github.com/your-org/rcpilot for full documentation.
+# See https://github.com/kjozsa/rcpilot for full documentation.
 
 # Directory scanned for projects — each immediate subdirectory is a project.
-projects_dir = "~/projects"
+projects_dir = "{projects_dir}"
 
 # Uvicorn bind host; 0.0.0.0 makes it reachable over a VPN.
 host = "0.0.0.0"
@@ -49,6 +49,15 @@ class Config:
     window_cron: str = ""
 
 
+def _prompt_projects_dir() -> str:
+    default = "~/projects"
+    try:
+        answer = input(f"Projects directory [{default}]: ").strip()
+    except (EOFError, KeyboardInterrupt):
+        answer = ""
+    return answer or default
+
+
 def load_config(path: Path | None = None) -> Config:
     """
     Load config from *path* (or PILOT_CONFIG env var, or the default location).
@@ -59,11 +68,12 @@ def load_config(path: Path | None = None) -> Config:
         path = Path(env_path) if env_path else DEFAULT_CONFIG_PATH
 
     if not path.exists():
+        projects_dir = _prompt_projects_dir()
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(_DEFAULT_CONFIG_TEMPLATE)
+        path.write_text(_DEFAULT_CONFIG_TEMPLATE.format(projects_dir=projects_dir))
         from loguru import logger
-        logger.info("created default config at {}", path)
-        return Config()
+        logger.info("created config at {} with projects_dir={}", path, projects_dir)
+        return Config(projects_dir=Path(projects_dir).expanduser())
 
     with open(path, "rb") as fh:
         raw = tomllib.load(fh)
