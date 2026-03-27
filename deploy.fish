@@ -16,7 +16,7 @@ if test "$HOSTNAME" = "rpi5"
     git pull
     
     echo "Syncing dependencies..."
-    uv sync
+    uv sync --frozen
     
     echo "Restarting service..."
     systemctl --user restart rcpilot
@@ -32,7 +32,7 @@ else
     ssh $HOST "cd $PROJECT_DIR && git pull"
     
     echo "Syncing dependencies on $HOST..."
-    ssh $HOST "cd $PROJECT_DIR && uv sync"
+    ssh $HOST "cd $PROJECT_DIR && uv sync --frozen"
     
     echo "Restarting service on $HOST..."
     ssh $HOST "systemctl --user restart rcpilot && systemctl --user status rcpilot --no-pager"
