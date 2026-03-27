@@ -31,6 +31,7 @@ _state: dict = {
     "window_cron": None,
     "last_fired_at": None,   # ISO datetime string of most recent fire
     "next_fire": None,       # ISO datetime string of next scheduled fire
+    "reset_at": None,        # ISO datetime string when usage resets (last_fired_at + 5h)
     "fire_log": [],          # last 5 fires: [{fired_at, ok, detail}]
 }
 _state_lock = threading.Lock()
@@ -160,8 +161,10 @@ def _fire(config: "Config", now: datetime) -> None:
         logger.exception("ticker: cron fire failed at {}", label)
 
     entry = {"fired_at": now.isoformat(timespec="seconds"), "ok": ok, "detail": detail}
+    reset_time = now + timedelta(hours=5)
     with _state_lock:
         _state["last_fired_at"] = now.isoformat(timespec="seconds")
+        _state["reset_at"] = reset_time.isoformat(timespec="seconds")
         _state["fire_log"] = ([entry] + _state["fire_log"])[:5]
 
 

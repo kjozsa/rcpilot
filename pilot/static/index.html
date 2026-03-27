@@ -1771,7 +1771,16 @@
         return;
       }
       let remaining = '?';
-      if (data.next_fire) {
+      if (data.reset_at) {
+        const diffMs = new Date(data.reset_at) - Date.now();
+        if (diffMs > 0) {
+          const totalMin = Math.round(diffMs / 60000);
+          const h = Math.floor(totalMin / 60), m = totalMin % 60;
+          remaining = h > 0 ? `${h}h ${m}m` : `${m}m`;
+        } else {
+          remaining = data.reset_at.slice(11, 16);
+        }
+      } else if (data.next_fire) {
         const diffMs = new Date(data.next_fire) - Date.now();
         if (diffMs > 0) {
           const totalMin = Math.round(diffMs / 60000);
