@@ -67,6 +67,7 @@ def _ensure_code_review_plugin() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # type: ignore[type-arg]
+    logger.info("rcpilot v{}", pkg_version("rcpilot"))
     db_path = str(_config.db_path)
     logger.info("initialising database at {}", db_path)
     _config.db_path.parent.mkdir(parents=True, exist_ok=True)
