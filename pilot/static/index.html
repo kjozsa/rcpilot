@@ -1126,6 +1126,7 @@
 
   // ── Session actions ────────────────────────────────────────────────────
   async function killSession(project, sessionId) {
+    if (!confirm('Kill this session?')) return;
     try {
       const res = await fetch(`/api/sessions/${encodeURIComponent(project)}/${sessionId}`, { method: 'DELETE' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
