@@ -547,7 +547,7 @@
       border-top: 1px solid var(--border);
       border-radius: var(--radius) var(--radius) 0 0;
       width: 100%;
-      max-height: 85vh;
+      max-height: 55vh;
       display: flex;
       flex-direction: column;
     }
@@ -576,14 +576,14 @@
       overflow-y: auto;
       overflow-x: auto;
       -webkit-overflow-scrolling: touch;
-      padding: .75rem 1rem;
+      padding: .5rem .75rem;
       flex: 1;
     }
 
     #diff-body pre {
       font-family: ui-monospace, monospace;
-      font-size: .75rem;
-      line-height: 1.5;
+      font-size: .65rem;
+      line-height: 1.4;
       white-space: pre;
       margin: 0;
     }
@@ -1002,8 +1002,12 @@
       border: 1px solid var(--border);
       border-top: 1px solid var(--border);
     }
+    #diff-body {
+      padding: .75rem 1rem;
+    }
     #diff-body pre {
       font-size: .82rem;
+      line-height: 1.5;
     }
   }
   </style>
