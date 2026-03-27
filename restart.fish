@@ -1,6 +1,6 @@
 #!/usr/bin/env fish
 
-set pid (ps aux | grep -E "uv run rcpilot|\.venv/bin/rcpilot" | grep -v grep | awk '{print $2}')
+set pid (ps aux | grep -E "uv run (rc)?pilot|\.venv/bin/(rc)?pilot" | grep -v grep | awk '{print $2}')
 if test -n "$pid"
     echo "Killing PID(s): $pid"
     kill $pid
