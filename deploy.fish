@@ -1,23 +1,11 @@
 #!/usr/bin/env fish
 
 set HOST "pi@rpi5"
-set REMOTE_DIR "/home/pi/pilot/projects/rcpilot"
 
-echo "Deploying to $HOST:$REMOTE_DIR ..."
+echo "Upgrading rcpilot on $HOST ..."
+ssh $HOST "uv tool upgrade rcpilot"
 
-rsync -av \
-    --exclude=".venv" \
-    --exclude="__pycache__" \
-    --exclude="*.pyc" \
-    --exclude=".git" \
-    --exclude="*.db" \
-    --exclude="*.log" \
-    (pwd)/ $HOST:$REMOTE_DIR/
+echo "Restarting service on $HOST ..."
+ssh $HOST "systemctl --user restart rcpilot && systemctl --user status rcpilot --no-pager"
 
-echo "Reinstalling package on Pi ..."
-ssh $HOST "cd $REMOTE_DIR && uv pip install -e ."
-
-echo "Restarting pilot service ..."
-ssh $HOST "cd $REMOTE_DIR && fish restart.fish"
-
-echo "Done. Pilot restarted on $HOST."
+echo "Done."
