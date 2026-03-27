@@ -316,16 +316,18 @@ def _get_project_path(project: str) -> str:
 @app.post("/api/sessions/{project}")
 def start_session(
     project: str,
-    name: str = Body(..., embed=True),
+    name: str = Body("", embed=True),
     yolo: bool = Body(False, embed=True),
 ) -> dict:
     path = _get_project_path(project)
     ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-    session_name = f"{project} - {name}" if name else ts
+    db_name = name if name else ts
+    claude_name = f"{project} - {db_name}"
     return session_mgr.start_session(
         project=project,
         project_path=path,
-        name=session_name,
+        db_name=db_name,
+        claude_name=claude_name,
         db_path=str(_config.db_path),
         yolo=yolo,
         proxy_url=_proxy_url(),

@@ -75,7 +75,8 @@ def _poll_log_for_url(log_path: Path, timeout: float) -> tuple[str | None, str]:
 def start_session(
     project: str,
     project_path: str,
-    name: str,
+    db_name: str,
+    claude_name: str,
     db_path: str,
     yolo: bool = False,
     proxy_url: str | None = None,
@@ -87,12 +88,12 @@ def start_session(
     db_dir = Path(db_path).parent
     log_path = db_dir / f"session-{secrets.token_hex(6)}.log"
 
-    claude_cmd = f"claude remote-control --spawn=session --name {name!r}"
+    claude_cmd = f"claude remote-control --spawn=session --name {claude_name!r}"
     if yolo:
         claude_cmd += " --permission-mode bypassPermissions"
 
     cmd = ["script", "-q", "-e", "-f", "-c", claude_cmd, str(log_path)]
-    logger.info("start_session: project={} name={!r} log={}", project, name, log_path)
+    logger.info("start_session: project={} db_name={!r} claude_name={!r} log={}", project, db_name, claude_name, log_path)
 
     env = None
     if proxy_url:
@@ -113,16 +114,16 @@ def start_session(
     url, output = _poll_log_for_url(log_path, _URL_WAIT_SECONDS)
 
     sid = db.create_session(
-        db_path, project, name, proc.pid, url, log_path=str(log_path)
+        db_path, project, db_name, proc.pid, url, log_path=str(log_path)
     )
 
     if url is None:
         logger.warning("timed out waiting for RC URL. Log:\n{}", output.strip() or "(empty)")
         db.end_session(db_path, sid, "timed_out", output or None)
-        return {"status": "timed_out", "rc_url": None, "session_id": sid, "name": name}
+        return {"status": "timed_out", "rc_url": None, "session_id": sid, "name": db_name}
 
     logger.info("RC URL captured: {}", url)
-    return {"status": "running", "rc_url": url, "session_id": sid, "name": name}
+    return {"status": "running", "rc_url": url, "session_id": sid, "name": db_name}
 
 
 def list_running_sessions(project: str, db_path: str) -> list[dict[str, Any]]:
@@ -163,8 +164,9 @@ def resume_session(
     if not record:
         return {"status": "error", "rc_url": None, "session_id": None, "name": None}
     old_name = record.get("name") or record.get("started_at", "")[:10]
-    new_name = f"cont. {old_name}"
-    return start_session(project, project_path, new_name, db_path, yolo=yolo, proxy_url=proxy_url)
+    db_name = f"cont. {old_name}"
+    claude_name = f"{project} - {db_name}"
+    return start_session(project, project_path, db_name, claude_name, db_path, yolo=yolo, proxy_url=proxy_url)
 
 
 def kill_session(session_id: int, db_path: str) -> dict[str, Any]:
