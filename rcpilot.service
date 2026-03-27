@@ -1,0 +1,14 @@
+[Unit]
+Description=rcpilot — Claude Code Remote Control session manager
+After=network.target
+
+[Service]
+# On a fresh host after `uv tool install rcpilot`, the binary lands at:
+#   %h/.local/bin/rcpilot
+# Adjust the path if running from a local venv instead.
+ExecStart=%h/.local/bin/rcpilot
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

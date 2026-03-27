@@ -964,6 +964,24 @@
       cursor: pointer;
       white-space: nowrap;
     }
+
+  /* ── Desktop refinements ─────────────────────────────────────────── */
+  @media (min-width: 640px) {
+    /* Centered dialog modals: cap width and center */
+    #newsession-sheet { max-width: 440px; margin: 0 auto; }
+    #send-sheet       { max-width: 560px; margin: 0 auto; }
+
+    /* Bottom-sheet modals: cap width, center, add side borders */
+    #ticker-overlay, #diff-overlay, #snapshot-overlay, #pr-review-overlay {
+      justify-content: center;
+    }
+    #ticker-sheet, #diff-sheet, #snapshot-sheet, #pr-review-sheet {
+      max-width: 860px;
+      width: 100%;
+      border-left: 1px solid var(--border);
+      border-right: 1px solid var(--border);
+    }
+  }
   </style>
 </head>
 <body>
