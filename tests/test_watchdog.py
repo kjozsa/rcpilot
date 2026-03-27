@@ -24,9 +24,9 @@ def cfg(tmp_path: Path) -> Config:
 
 def test_sweep_marks_dead_session_stopped(cfg: Config, monkeypatch: pytest.MonkeyPatch) -> None:
     """Watchdog marks a session stopped when its process is no longer alive."""
-    monkeypatch.setattr("pilot.watchdog._session_exists", lambda _: False)
+    monkeypatch.setattr("pilot.watchdog._pid_alive", lambda _: False)
 
-    sid = create_session(str(cfg.db_path), "my-project", None)
+    create_session(str(cfg.db_path), "my-project", "test", None, None)
     _sweep(cfg)
 
     rows = list_sessions(str(cfg.db_path), "my-project")
@@ -36,9 +36,9 @@ def test_sweep_marks_dead_session_stopped(cfg: Config, monkeypatch: pytest.Monke
 
 def test_sweep_leaves_live_session_alone(cfg: Config, monkeypatch: pytest.MonkeyPatch) -> None:
     """Watchdog does not touch a session whose process is still running."""
-    monkeypatch.setattr("pilot.watchdog._session_exists", lambda _: True)
+    monkeypatch.setattr("pilot.watchdog._pid_alive", lambda _: True)
 
-    sid = create_session(str(cfg.db_path), "my-project", None)
+    create_session(str(cfg.db_path), "my-project", "test", 12345, None)
     _sweep(cfg)
 
     row = get_running_session(str(cfg.db_path), "my-project")

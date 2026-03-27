@@ -64,7 +64,7 @@ def test_result_is_sorted_alphabetically(tmp_path: Path) -> None:
     for name in ["zebra", "apple", "mango"]:
         (tmp_path / name).mkdir()
 
-    result = list_projects(tmp_path)
+    result = list_projects(tmp_path, sort_by="alpha")
     names = [p["name"] for p in result]
 
     assert names == sorted(names)

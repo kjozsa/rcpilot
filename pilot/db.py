@@ -133,6 +133,17 @@ def get_session_by_id(db_path: str, session_id: int) -> dict[str, Any] | None:
     return dict(row) if row else None
 
 
+def get_running_session(db_path: str, project: str) -> dict[str, Any] | None:
+    """Return the most recent running session for *project*, or None."""
+    with _connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT * FROM sessions WHERE project = ? AND status = 'running' "
+            "ORDER BY started_at DESC LIMIT 1",
+            (project,),
+        ).fetchone()
+    return dict(row) if row else None
+
+
 def list_running_sessions(db_path: str, project: str) -> list[dict[str, Any]]:
     """Return all running session rows for *project*, newest first."""
     with _connect(db_path) as conn:

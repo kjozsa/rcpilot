@@ -9,8 +9,9 @@ import pytest
 from pilot.config import Config, load_config
 
 
-def test_defaults_when_no_file(tmp_path: Path) -> None:
+def test_defaults_when_no_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """load_config returns sensible defaults when the config file is absent."""
+    monkeypatch.setattr("pilot.config._prompt_first_run", lambda: ("~/projects", 8000))
     missing = tmp_path / "nonexistent.toml"
     cfg = load_config(missing)
 

@@ -77,10 +77,11 @@ def test_get_history_unknown_project_returns_404(client: TestClient) -> None:
 
 def test_get_session_status_stopped_when_process_gone(client_with_project: tuple) -> None:
     client, name = client_with_project
-    with patch("pilot.sessions._session_exists", return_value=False):
+    with patch("pilot.sessions._pid_alive", return_value=False):
         resp = client.get(f"/api/sessions/{name}")
     assert resp.status_code == 200
-    assert resp.json()["status"] == "stopped"
+    # When process is gone, list_running_sessions marks it stopped and returns empty list
+    assert resp.json()["sessions"] == []
 
 
 def test_start_session_unknown_project_returns_404(client: TestClient) -> None:
@@ -101,8 +102,8 @@ def test_start_session_calls_session_mgr(client_with_project: tuple) -> None:
 def test_resume_calls_start_session(client_with_project: tuple) -> None:
     client, name = client_with_project
     fake_result = {"status": "running", "rc_url": "https://claude.ai/rc/test", "session_id": 2}
-    with patch("pilot.sessions.start_session", return_value=fake_result) as mock:
-        resp = client.post(f"/api/sessions/{name}/resume")
+    with patch("pilot.sessions.resume_session", return_value=fake_result) as mock:
+        resp = client.post(f"/api/sessions/{name}/history/1/resume")
     assert resp.status_code == 200
     mock.assert_called_once()
 
@@ -111,7 +112,7 @@ def test_delete_session_calls_kill(client_with_project: tuple) -> None:
     client, name = client_with_project
     fake_result = {"status": "stopped", "rc_url": None, "session_id": None}
     with patch("pilot.sessions.kill_session", return_value=fake_result) as mock:
-        resp = client.delete(f"/api/sessions/{name}")
+        resp = client.delete(f"/api/sessions/{name}/1")
     assert resp.status_code == 200
     assert resp.json()["status"] == "stopped"
     mock.assert_called_once()
