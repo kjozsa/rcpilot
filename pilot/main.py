@@ -247,7 +247,7 @@ def start_session(
     return session_mgr.start_session(
         project=project,
         project_path=path,
-        name=name,
+        name=f"{project} - {name}",
         db_path=str(_config.db_path),
         yolo=yolo,
         proxy_url=_proxy_url(),
