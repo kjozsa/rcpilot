@@ -36,6 +36,7 @@ from pilot import proxy as pilot_proxy
 from pilot import sessions as session_mgr
 from pilot.watchdog import start_watchdog
 from pilot.ticker import start_ticker, get_ticker_state
+from pilot.updater import start_updater, get_updater_state
 
 _config: Config = load_config()
 _STATIC_DIR = Path(__file__).parent / "static"
@@ -80,13 +81,18 @@ async def lifespan(app: FastAPI):  # type: ignore[type-arg]
     logger.info("starting ticker (window_cron={!r})", _config.window_cron)
     _tk_thread, _tk_stop = start_ticker(_config)
 
+    logger.info("starting updater (claude_update_cron={!r})", _config.claude_update_cron)
+    _up_thread, _up_stop = start_updater(_config)
+
     yield  # server runs here
 
-    logger.info("shutting down — signalling watchdog and ticker")
+    logger.info("shutting down — signalling watchdog, ticker and updater")
     _wd_stop.set()
     _wd_thread.join(timeout=5)
     _tk_stop.set()
     _tk_thread.join(timeout=5)
+    _up_stop.set()
+    _up_thread.join(timeout=5)
 
 
 app = FastAPI(title="rcpilot", version=pkg_version("rcpilot"), lifespan=lifespan)
@@ -109,7 +115,12 @@ def serve_index() -> FileResponse:
 
 @app.get("/api/info")
 def get_info() -> dict:
-    return {"version": pkg_version("rcpilot")}
+    updater = get_updater_state()
+    return {
+        "version": pkg_version("rcpilot"),
+        "claude_version": updater["claude_version"],
+        "last_update_at": updater["last_update_at"],
+    }
 
 
 def _proxy_url() -> str:

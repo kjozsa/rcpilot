@@ -47,6 +47,8 @@ class Config:
     db_path: Path = field(default_factory=lambda: Path.home() / ".config" / "rcpilot" / "pilot.db")
     # Cron expression for usage window scheduler (empty = disabled)
     window_cron: str = ""
+    # Cron expression for claude auto-update (default: 06:00 and 18:00 daily)
+    claude_update_cron: str = "0 6,18 * * *"
 
 
 def _prompt_first_run() -> tuple[str, int]:
@@ -97,5 +99,7 @@ def load_config(path: Path | None = None) -> Config:
         kwargs["db_path"] = Path(raw["db_path"]).expanduser()
     if "window_cron" in raw:
         kwargs["window_cron"] = str(raw["window_cron"]).strip()
+    if "claude_update_cron" in raw:
+        kwargs["claude_update_cron"] = str(raw["claude_update_cron"]).strip()
 
     return Config(**kwargs)

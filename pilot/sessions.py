@@ -92,7 +92,14 @@ def start_session(
     if yolo:
         claude_cmd += " --permission-mode bypassPermissions"
 
-    cmd = ["script", "-q", "-e", "-f", "-c", claude_cmd, str(log_path)]
+    # Wrap in systemd-run --scope so the process lives in its own transient
+    # cgroup, outside the rcpilot service cgroup.  Without this, systemd's
+    # default KillMode=control-group would kill Claude when rcpilot restarts —
+    # even though script is spawned with start_new_session=True.
+    cmd = [
+        "systemd-run", "--user", "--scope", "--",
+        "script", "-q", "-e", "-f", "-c", claude_cmd, str(log_path),
+    ]
     logger.info("start_session: project={} db_name={!r} claude_name={!r} log={}", project, db_name, claude_name, log_path)
 
     env = None
@@ -107,7 +114,7 @@ def start_session(
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
-        start_new_session=True,  # new session → independent of FastAPI restarts
+        start_new_session=True,
     )
     logger.info("spawned script pid={}", proc.pid)
 

@@ -36,6 +36,16 @@
       margin: 0 auto;
     }
 
+    /* ── Footer ──────────────────────────────────────────────────────── */
+    footer {
+      margin-top: calc(var(--gap) * 2);
+      padding: .6rem 0;
+      border-top: 1px solid var(--border);
+      text-align: center;
+      font-size: .72rem;
+      color: var(--muted);
+    }
+
     /* ── Header ──────────────────────────────────────────────────────── */
     header {
       display: flex;
@@ -1146,6 +1156,14 @@
     loadProjects();
     fetch('/api/info').then(r => r.json()).then(d => {
       document.getElementById('version').textContent = 'v' + d.version;
+      if (d.claude_version) {
+        document.getElementById('claude-version').textContent = 'claude v' + d.claude_version;
+        const updEl = document.getElementById('claude-updated');
+        if (d.last_update_at) {
+          const ago = fmtAgo(new Date(d.last_update_at));
+          updEl.textContent = ' · updated ' + ago;
+        }
+      }
     });
     loadTicker();
     setInterval(loadTicker, 60_000);
@@ -1943,11 +1961,22 @@
     }).join('\n');
   }
 
+  function fmtAgo(date) {
+    const secs = Math.round((Date.now() - date.getTime()) / 1000);
+    if (secs < 60)   return secs + 's ago';
+    if (secs < 3600) return Math.round(secs / 60) + 'm ago';
+    if (secs < 86400) return Math.round(secs / 3600) + 'h ago';
+    return Math.round(secs / 86400) + 'd ago';
+  }
+
   function escHtml(str) {
     return String(str)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;')
       .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 </script>
+<footer>
+  <span id="claude-version"></span><span id="claude-updated"></span>
+</footer>
 </body>
 </html>
