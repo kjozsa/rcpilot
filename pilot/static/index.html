@@ -100,6 +100,13 @@
       padding: .1rem .4rem;
     }
 
+    .git-hash {
+      font-size: .65rem;
+      font-family: monospace;
+      color: #555a7a;
+      margin-left: .2rem;
+    }
+
     .git-diff-stat {
       font-size: .75rem;
       color: var(--yellow);
@@ -192,14 +199,32 @@
       display: flex;
       gap: .5rem;
       margin-top: .75rem;
+      align-items: center;
     }
 
-    .git-row {
-      display: flex;
+    .btn-more {
+      margin-left: auto;
+      background: none;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      font-weight: normal;
+      font-size: .88rem;
+      padding: .5rem .85rem;
+      letter-spacing: .05em;
+    }
+    .btn-more.open {
+      color: var(--fg);
+      border-color: #555;
+      background: rgba(255,255,255,.05);
+    }
+
+    .git-actions {
+      display: none;
+      flex-wrap: wrap;
       gap: .5rem;
       margin-top: .5rem;
-      flex-wrap: wrap;
     }
+    .git-actions.open { display: flex; }
 
     button {
       border: none;
@@ -1229,6 +1254,7 @@
         <div class="project-name">
           ${escHtml(project.name)}
           ${project.git_branch ? `<span class="git-badge">${escHtml(project.git_branch)}</span>` : (project.has_git ? '<span class="git-badge">git</span>' : '')}
+          ${project.git_hash ? `<span class="git-hash">${escHtml(project.git_hash)}${project.git_commit_time ? ' · ' + fmtAgo(new Date(project.git_commit_time)) : ''}</span>` : ''}
         </div>
         <span class="status-badge status-loading" id="badge-${project.name}">…</span>
       </div>
@@ -1236,12 +1262,13 @@
       <div class="running-sessions" id="running-${project.name}"></div>
       <div class="action-row" id="actions-${project.name}">
         <button class="btn-connect" onclick="openNewSession('${project.name}')" id="btn-connect-${project.name}">⚡ New Session</button>
-        ${project.has_git ? `<button class="btn-pull" style="margin-left:auto" onclick="gitPull(this,'${project.name}')" id="btn-pull-${project.name}">Pull ⬇</button>` : ''}
+        ${project.has_git ? `<button class="btn-more" id="btn-more-${project.name}" onclick="toggleGitActions('${project.name}')">···</button>` : ''}
       </div>
       ${project.has_git ? `
-      <div class="git-row">
-        <input type="number" class="pr-input" placeholder="PR#" min="1" id="pr-input-${project.name}"><button class="btn-review-pr" onclick="openPRReview('${project.name}')">🔍 Review PR</button>
+      <div class="git-actions${project.git_diff_stat ? ' open' : ''}" id="git-actions-${project.name}">
+        <button class="btn-pull" onclick="gitPull(this,'${project.name}')" id="btn-pull-${project.name}">Pull ⬇</button>
         <button class="btn-commit" style="margin-left:auto" onclick="openCommitSend('${project.name}')" id="btn-commit-${project.name}">✨ Commit & Push</button>
+        <input type="number" class="pr-input" placeholder="PR#" min="1" id="pr-input-${project.name}"><button class="btn-review-pr" onclick="openPRReview('${project.name}')">🔍 Review PR</button>
       </div>` : ''}
       <div class="history-header">
         <button class="history-toggle" id="hist-toggle-${project.name}"
@@ -1255,6 +1282,11 @@
       </div>
       <div class="session-history" id="history-${project.name}"></div>
     `;
+    // Sync ··· button open state for auto-expanded cards
+    if (project.has_git && project.git_diff_stat) {
+      const btn = card.querySelector(`#btn-more-${project.name}`);
+      if (btn) btn.classList.add('open');
+    }
     return card;
   }
 
@@ -1384,18 +1416,26 @@
     });
   }
 
+  function toggleGitActions(name) {
+    const panel = document.getElementById(`git-actions-${name}`);
+    const btn   = document.getElementById(`btn-more-${name}`);
+    if (!panel) return;
+    const open = panel.classList.toggle('open');
+    btn.classList.toggle('open', open);
+  }
+
   function updateCardBadge(name, sessions) {
     const badge = document.getElementById(`badge-${name}`);
     if (!badge) return;
     const count = (sessions || []).length;
     if (count === 0) {
-      badge.textContent = 'stopped';
-      badge.className = 'status-badge status-stopped';
+      badge.textContent = '';
+      badge.className = 'status-badge';
     } else if (count === 1) {
-      badge.textContent = 'running';
+      badge.textContent = '1 session';
       badge.className = 'status-badge status-running';
     } else {
-      badge.textContent = `${count} running`;
+      badge.textContent = `${count} sessions`;
       badge.className = 'status-badge status-running';
     }
   }
