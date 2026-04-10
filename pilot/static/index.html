@@ -44,7 +44,25 @@
       text-align: center;
       font-size: .72rem;
       color: var(--muted);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: .6rem;
     }
+    #update-btn {
+      background: none;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: .85rem;
+      padding: 0;
+      line-height: 1;
+      opacity: .6;
+      transition: opacity .15s;
+    }
+    #update-btn:hover { opacity: 1; }
+    #update-btn.spinning { animation: spin .8s linear infinite; opacity: 1; }
+    @keyframes spin { to { transform: rotate(360deg); } }
 
     /* ── Header ──────────────────────────────────────────────────────── */
     header {
@@ -2001,6 +2019,36 @@
     }).join('\n');
   }
 
+  async function triggerUpdate() {
+    const btn = document.getElementById('update-btn');
+    btn.classList.add('spinning');
+    btn.disabled = true;
+    try {
+      await fetch('/api/update', { method: 'POST' });
+      // Poll for version change (up to ~30s)
+      const before = document.getElementById('claude-version').textContent;
+      let attempts = 0;
+      const poll = setInterval(() => {
+        fetch('/api/info').then(r => r.json()).then(d => {
+          const cur = d.claude_version ? 'claude v' + d.claude_version : '';
+          if (cur !== before || ++attempts > 20) {
+            clearInterval(poll);
+            btn.classList.remove('spinning');
+            btn.disabled = false;
+            if (d.claude_version) {
+              document.getElementById('claude-version').textContent = 'claude v' + d.claude_version;
+              const updEl = document.getElementById('claude-updated');
+              if (d.last_update_at) updEl.textContent = ' · updated ' + fmtAgo(new Date(d.last_update_at));
+            }
+          }
+        });
+      }, 1500);
+    } catch (_) {
+      btn.classList.remove('spinning');
+      btn.disabled = false;
+    }
+  }
+
   function fmtAgo(date) {
     const secs = Math.round((Date.now() - date.getTime()) / 1000);
     if (secs < 60)   return secs + 's ago';
@@ -2017,6 +2065,7 @@
 </script>
 <footer>
   <span id="claude-version"></span><span id="claude-updated"></span>
+  <button id="update-btn" title="Update Claude CLI now" onclick="triggerUpdate()">↻</button>
 </footer>
 </body>
 </html>

@@ -186,6 +186,11 @@ def _run_update(now: datetime) -> None:
         _state["last_update_ok"] = ok
 
 
+def force_update() -> None:
+    """Trigger a claude update immediately in a background thread."""
+    threading.Thread(target=_run_update, args=(datetime.now(),), daemon=True, name="pilot-updater-manual").start()
+
+
 def start_updater(config: "Config") -> tuple[threading.Thread, threading.Event]:
     """Start the updater thread. Returns (thread, stop_event)."""
     stop_event = threading.Event()

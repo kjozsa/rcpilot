@@ -36,7 +36,7 @@ from pilot import proxy as pilot_proxy
 from pilot import sessions as session_mgr
 from pilot.watchdog import start_watchdog
 from pilot.ticker import start_ticker, get_ticker_state
-from pilot.updater import start_updater, get_updater_state
+from pilot.updater import start_updater, get_updater_state, force_update
 
 _config: Config = load_config()
 _STATIC_DIR = Path(__file__).parent / "static"
@@ -156,10 +156,23 @@ def get_stats() -> dict:
     return pilot_proxy.get_stats()
 
 
+@app.post("/api/update")
+def trigger_update() -> dict:
+    """Trigger an immediate claude update in the background."""
+    force_update()
+    return {"ok": True}
+
+
 @app.get("/api/ticker")
 def get_ticker() -> dict:
     """Return window ticker state: configured times, last fired, next window."""
-    return get_ticker_state()
+    state = get_ticker_state()
+    # Use the authoritative reset timestamp from Anthropic headers when available
+    if not state.get("reset_at"):
+        proxy_resets = pilot_proxy.get_stats().get("resets", {})
+        if "5h" in proxy_resets:
+            state["reset_at"] = proxy_resets["5h"]
+    return state
 
 
 @app.get("/api/projects")

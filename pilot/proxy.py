@@ -26,6 +26,7 @@ _RATELIMIT_PREFIX = "anthropic-ratelimit-unified-"
 
 _stats: dict[str, Any] = {
     "windows": {},    # window_name → utilization float 0–1, e.g. {"5h": 0.45, "7d": 0.72}
+    "resets": {},     # window_name → ISO reset timestamp, e.g. {"5h": "2026-04-11T02:00:00Z"}
     "models": {},     # model_name → call count, e.g. {"claude-opus-4-6": 12}
     "updated_at": None,
 }
@@ -39,6 +40,7 @@ def get_stats() -> dict[str, Any]:
 
 def _update_stats(model: str | None, response_headers: httpx.Headers) -> None:
     windows: dict[str, float] = {}
+    resets: dict[str, str] = {}
     for k, v in response_headers.items():
         k_lower = k.lower()
         if not k_lower.startswith(_RATELIMIT_PREFIX):
@@ -51,10 +53,22 @@ def _update_stats(model: str | None, response_headers: httpx.Headers) -> None:
                 windows[window_name] = float(v)
             except ValueError:
                 pass
+        # suffix looks like "5h-requests-reset" or "5h-tokens-reset" → Unix timestamp
+        elif suffix.endswith("-reset"):
+            parts = suffix[: -len("-reset")].split("-", 1)
+            window_name = parts[0]   # "5h", "7d", etc.
+            if window_name not in resets:
+                try:
+                    ts = int(v)
+                    resets[window_name] = datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
+                except (ValueError, OSError):
+                    resets[window_name] = v
 
     with _stats_lock:
         if windows:
             _stats["windows"].update(windows)
+        if resets:
+            _stats["resets"].update(resets)
         if model:
             _stats["models"][model] = _stats["models"].get(model, 0) + 1
         _stats["updated_at"] = datetime.now(timezone.utc).isoformat()
