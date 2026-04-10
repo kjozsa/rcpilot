@@ -127,6 +127,23 @@ def _proxy_url() -> str:
     return f"http://127.0.0.1:{_config.port}/proxy"
 
 
+def _subprocess_env() -> dict:
+    """Return an env dict suitable for claude subprocesses.
+
+    Extends the service PATH with ~/.local/bin so that `claude` (installed
+    there by npm/pip for the pi user) is reachable even when the systemd
+    service starts with a stripped PATH.
+    """
+    import os
+    env = os.environ.copy()
+    local_bin = str(Path.home() / ".local" / "bin")
+    path = env.get("PATH", "")
+    if local_bin not in path.split(":"):
+        env["PATH"] = f"{local_bin}:{path}"
+    env["ANTHROPIC_BASE_URL"] = _proxy_url()
+    return env
+
+
 @app.api_route("/proxy/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"])
 async def anthropic_proxy(request: Request, path: str) -> StreamingResponse:
     """Transparent proxy to api.anthropic.com — captures usage stats."""
@@ -170,18 +187,15 @@ def run_claude(
     prompt: str = Body(..., embed=True),
 ) -> dict:
     """Run ``claude -p <prompt>`` in the project directory and return the output."""
-    import os
     import subprocess
     path = _get_project_path(project)
-    env = os.environ.copy()
-    env["ANTHROPIC_BASE_URL"] = _proxy_url()
     result = subprocess.run(
         ["claude", "-p", prompt],
         cwd=path,
         capture_output=True,
         text=True,
         timeout=300,
-        env=env,
+        env=_subprocess_env(),
     )
     return {
         "output": result.stdout.strip(),
@@ -201,17 +215,14 @@ def review_pr(
     launch the claude process detached and return immediately rather than
     waiting up to several minutes for it to finish.
     """
-    import os
     import subprocess
     path = _get_project_path(project)
-    env = os.environ.copy()
-    env["ANTHROPIC_BASE_URL"] = _proxy_url()
     subprocess.Popen(
         ["claude", "-p", f"/code-review:code-review {pr_number}"],
         cwd=path,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
-        env=env,
+        env=_subprocess_env(),
     )
     return {
         "review": f"Review started for PR #{pr_number}. Results will be posted as a comment on the GitHub PR.",
