@@ -1297,7 +1297,7 @@
       </div>
       ${project.has_git ? `
       <div class="git-actions${project.git_diff_stat ? ' open' : ''}" id="git-actions-${project.name}">
-        <button class="btn-pull" onclick="gitPull(this,'${project.name}')" id="btn-pull-${project.name}" title="Pull">⬇</button>
+        <button class="btn-pull" onclick="gitPull(this,'${project.name}')" id="btn-pull-${project.name}">⬇ Pull</button>
         <button class="btn-commit" onclick="openCommitSend('${project.name}')" id="btn-commit-${project.name}">✨ Commit & Push</button>
         <div class="pr-row"><input type="number" class="pr-input" placeholder="PR#" min="1" id="pr-input-${project.name}"><button class="btn-review-pr" onclick="openPRReview('${project.name}')" title="Review PR">🔍</button></div>
       </div>` : ''}
