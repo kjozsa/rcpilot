@@ -82,28 +82,4 @@ No authentication. Run on a trusted private network only (Tailscale, WireGuard, 
 
 ---
 
-## Roadmap
-
-| Phase | Status | Focus |
-|-------|--------|-------|
-| 0 — Foundation | ✅ done | Project discovery, web UI, session spawning |
-| 1 — Persistence | ✅ done | Session history, snapshots, watchdog, git & PR integration |
-| 1.5 — Tooling | ✅ done | Usage proxy, Claude auto-updater, project import, Claude-powered commit |
-| 2 — Context memory | 🔜 next | Claude API summarization, resume with injected context |
-| 3 — Polish | 💡 planned | Auth, PWA, PyPI publish, Docker, CI |
-
-See [ROADMAP.md](ROADMAP.md) for details.
-
----
-
-## Development
-
-```bash
-uv sync --extra dev
-uv run pytest
-uv run rcpilot
-```
-
----
-
 MIT License
