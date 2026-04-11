@@ -1202,10 +1202,10 @@
       if (d.claude_version) {
         document.getElementById('claude-version').textContent = 'claude v' + d.claude_version;
         const updEl = document.getElementById('claude-updated');
-        if (d.last_update_at) {
-          const ago = fmtAgo(new Date(d.last_update_at));
-          updEl.textContent = ' · updated ' + ago;
-        }
+        let updText = '';
+        if (d.last_check_at) updText += ' · checked ' + fmtAgo(new Date(d.last_check_at));
+        if (d.last_update_at) updText += ' · updated ' + fmtAgo(new Date(d.last_update_at));
+        updEl.textContent = updText;
       }
     });
     loadTicker();
@@ -2038,7 +2038,10 @@
             if (d.claude_version) {
               document.getElementById('claude-version').textContent = 'claude v' + d.claude_version;
               const updEl = document.getElementById('claude-updated');
-              if (d.last_update_at) updEl.textContent = ' · updated ' + fmtAgo(new Date(d.last_update_at));
+              let updText = '';
+              if (d.last_check_at) updText += ' · checked ' + fmtAgo(new Date(d.last_check_at));
+              if (d.last_update_at) updText += ' · updated ' + fmtAgo(new Date(d.last_update_at));
+              updEl.textContent = updText;
             }
           }
         });

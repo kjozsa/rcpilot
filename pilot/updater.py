@@ -40,7 +40,8 @@ def _claude_bin() -> str:
 
 _state: dict = {
     "claude_version": None,     # e.g. "1.2.3"
-    "last_update_at": None,     # ISO datetime of last successful `claude update`
+    "last_check_at": None,      # ISO datetime of last update check attempt
+    "last_update_at": None,     # ISO datetime of last version change (new version installed)
     "last_update_ok": None,     # bool
 }
 _state_lock = threading.Lock()
@@ -179,9 +180,11 @@ def _run_update(now: datetime) -> None:
     # Always refresh the version after an update attempt
     version = _read_claude_version()
     with _state_lock:
+        old_version = _state["claude_version"]
         if version:
             _state["claude_version"] = version
-        if ok:
+        _state["last_check_at"] = now.isoformat(timespec="seconds")
+        if ok and version and version != old_version:
             _state["last_update_at"] = now.isoformat(timespec="seconds")
         _state["last_update_ok"] = ok
 

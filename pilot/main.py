@@ -119,6 +119,7 @@ def get_info() -> dict:
     return {
         "version": pkg_version("rcpilot"),
         "claude_version": updater["claude_version"],
+        "last_check_at": updater["last_check_at"],
         "last_update_at": updater["last_update_at"],
     }
 
