@@ -1692,6 +1692,7 @@
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const { output, error, returncode } = await res.json();
       setSendState(returncode === 0 ? 'done' : 'error', output || error);
+      if (returncode === 0) loadProjects();
     } catch (err) {
       setSendState('error', err.message);
     }
