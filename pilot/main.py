@@ -27,7 +27,16 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from loguru import logger
 
-from importlib.metadata import version as pkg_version
+import tomllib as _tomllib
+
+def _read_version() -> str:
+    pyproject = Path(__file__).parent.parent / "pyproject.toml"
+    try:
+        with open(pyproject, "rb") as f:
+            return _tomllib.load(f)["project"]["version"]
+    except Exception:
+        from importlib.metadata import version as pkg_version
+        return _read_version()
 
 from pilot.config import Config, load_config
 from pilot.projects import list_projects
@@ -68,7 +77,7 @@ def _ensure_code_review_plugin() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # type: ignore[type-arg]
-    logger.info("rcpilot v{}", pkg_version("rcpilot"))
+    logger.info("rcpilot v{}", _read_version())
     db_path = str(_config.db_path)
     logger.info("initialising database at {}", db_path)
     _config.db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -95,7 +104,7 @@ async def lifespan(app: FastAPI):  # type: ignore[type-arg]
     _up_thread.join(timeout=5)
 
 
-app = FastAPI(title="rcpilot", version=pkg_version("rcpilot"), lifespan=lifespan)
+app = FastAPI(title="rcpilot", version=_read_version(), lifespan=lifespan)
 
 app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 
@@ -117,7 +126,7 @@ def serve_index() -> FileResponse:
 def get_info() -> dict:
     updater = get_updater_state()
     return {
-        "version": pkg_version("rcpilot"),
+        "version": _read_version(),
         "claude_version": updater["claude_version"],
         "last_check_at": updater["last_check_at"],
         "last_update_at": updater["last_update_at"],
