@@ -213,7 +213,7 @@ def run_claude(
     import subprocess
     path = _get_project_path(project)
     result = subprocess.run(
-        ["claude", "-p", prompt],
+        ["claude", "-p", "--dangerously-skip-permissions", prompt],
         cwd=path,
         capture_output=True,
         text=True,
