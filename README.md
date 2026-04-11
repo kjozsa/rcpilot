@@ -21,13 +21,19 @@ it with everything that's missing:
 - **Full session history** per project — every session logged with start time, duration, and status
 - **Terminal snapshots** — captured on session end and browsable any time
 - **Multiple concurrent sessions** per project, all tracked independently
-- **YOLO mode** — one toggle to run sessions with `--permission-mode bypassPermissions`
+- **YOLO mode** — one toggle to run sessions with `--dangerously-skip-permissions`
 - **Usage window scheduler** — cron-based background job fires `claude -p "hi"` to start the 5-hour rolling usage window at configured times
+- **Usage widget** — live progress bar in the header showing your 5-hour rate-limit window utilization, sourced from the built-in API proxy
 - **Session naming** — auto-named by timestamp, rename anything inline
 - **Git integration** — view diffs, pull, commit, and push without leaving the UI
+- **Claude-powered commit** — Commit & Push auto-generates a commit message via `claude -p`; you review and confirm before anything is pushed
 - **PR review** — trigger a full Claude code review on any open GitHub PR
+- **Import project** — clone a GitHub repository directly from the UI into your projects directory
+- **Project sort** — toggle between sort-by-last-modified and sort-by-name
 - **Watchdog** — background process monitor marks crashed or timed-out sessions automatically
 - **Sessions survive restarts** — the server can restart without killing active Claude sessions
+- **Claude CLI auto-updater** — background job runs `claude update` on a cron schedule (default: 06:00 and 18:00); current version and last-updated time shown in the header with a manual trigger button
+- **Anthropic API proxy** — transparent proxy between Claude Code and `api.anthropic.com` that captures rate-limit utilization, reset timestamps, and per-model call counts (no credentials exposed)
 
 ---
 
@@ -83,14 +89,23 @@ On a Pi, replace `localhost` with the Pi's IP or Tailscale hostname.
 
 ## The UI
 
+The header shows:
+
+- Current Claude CLI version and last-updated time
+- Live 5-hour API usage widget (utilization bar + percentage)
+- Next scheduled usage-window fire time
+- Manual "update Claude now" button
+
 Each project gets a card showing:
 
 - Running sessions with their RC URL (tap to open in Claude Code)
 - Start a new session (optionally named, optionally in YOLO mode)
 - Kill a running session
-- Git branch, diff stat, pull button, diff viewer, commit & push flow
-- PR review launcher
+- Git branch, diff stat, pull button, diff viewer, Claude-powered commit & push flow
+- PR review launcher (posts results as a GitHub PR comment)
 - Full session history with snapshot viewer and inline rename
+
+The project list can be sorted by last-modified or by name. New projects can be imported (cloned) from GitHub without leaving the UI.
 
 The UI is mobile-first with large tap targets — works well on iOS Safari and Android Chrome.
 No app install needed.
@@ -125,14 +140,18 @@ db_path = "~/.config/rcpilot/pilot.db"
 
 # Usage window scheduler — fires "claude -p hi" on a cron schedule to start
 # the 5-hour rolling usage window (Pro/Max plans). Standard 5-field cron syntax.
-# Example: fire at 07:00 and 12:00 every day
-window_cron = "0 7,12 * * *"
+# Example: fire at 07:00, 12:00, and 17:00 every day
+window_cron = "0 7,12,17 * * *"
+
+# Claude CLI auto-updater — runs "claude update" on a cron schedule.
+# Default: twice daily at 06:00 and 18:00. Set to "" to disable.
+claude_update_cron = "0 6,18 * * *"
 ```
 
 All fields are optional — the defaults above apply when the file is absent.
 
-The scheduler runs embedded in the app (no system cron needed). The next scheduled
-fire time is shown in the UI header. Supported cron syntax: `*`, `*/n`, `a-b`, `a,b,c`.
+Both schedulers run embedded in the app (no system cron needed). The next scheduled
+usage-window fire time is shown in the UI header. Supported cron syntax: `*`, `*/n`, `a-b`, `a,b,c`.
 
 ---
 
@@ -204,6 +223,7 @@ Simple token-based auth is planned for Phase 3.
 |-------|--------|-------|
 | 0 — Foundation | ✅ done | Project discovery, web UI, session spawning |
 | 1 — Persistence | ✅ done | Session history, snapshots, watchdog, git & PR integration |
+| 1.5 — Tooling | ✅ done | Usage proxy, Claude auto-updater, project import, sort, Claude-powered commit |
 | 2 — Context memory | 🔜 next | Claude API summarization, resume with injected context |
 | 3 — Polish | 💡 planned | Auth, PWA, PyPI publish, Docker, CI |
 
