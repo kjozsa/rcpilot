@@ -23,6 +23,7 @@ import shutil
 import subprocess
 import threading
 from datetime import datetime
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from loguru import logger
@@ -32,7 +33,7 @@ if TYPE_CHECKING:
 
 POLL_INTERVAL: float = 30.0  # seconds between cron checks
 DEFAULT_CRON = "0 6,18 * * *"
-CLAUDE_FALLBACK = "/home/pi/.local/bin/claude"
+CLAUDE_FALLBACK = str(Path.home() / ".local" / "bin" / "claude")
 
 
 def _claude_bin() -> str:

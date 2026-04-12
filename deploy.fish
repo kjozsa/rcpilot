@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
 
 set HOST "pi@rpi5"
-set PROJECT_DIR "/home/pi/pilot/projects/rcpilot"
+set PROJECT_DIR "$HOME/pilot/projects/rcpilot"
 
 # Detect if we're running on the server or remotely
 set HOSTNAME (hostname)
