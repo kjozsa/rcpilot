@@ -280,6 +280,32 @@ def git_pull(project: str) -> dict:
     }
 
 
+def _accept_claude_trust(project_path: Path) -> None:
+    """Write hasTrustDialogAccepted=true into ~/.claude.json for the given project path.
+
+    Claude Code asks "Do you trust this folder?" on first open. Without this entry the
+    remote-control session blocks waiting for user input that never arrives.
+    """
+    import json
+
+    claude_json = Path.home() / ".claude.json"
+    try:
+        data: dict = json.loads(claude_json.read_text()) if claude_json.exists() else {}
+    except Exception:
+        data = {}
+
+    projects: dict = data.setdefault("projects", {})
+    key = str(project_path.resolve())
+    entry: dict = projects.setdefault(key, {})
+    if not entry.get("hasTrustDialogAccepted"):
+        entry["hasTrustDialogAccepted"] = True
+        try:
+            claude_json.write_text(json.dumps(data, indent=2))
+            logger.info("accepted claude trust for {}", key)
+        except Exception as exc:
+            logger.warning("could not write trust entry to ~/.claude.json: {}", exc)
+
+
 @app.post("/api/projects/import")
 def import_project(
     repo_url: str = Body(..., embed=True),
@@ -326,6 +352,7 @@ def import_project(
                 detail=f"Git clone failed: {result.stderr.strip() or result.stdout.strip()}"
             )
         
+        _accept_claude_trust(target_path)
         logger.info("imported project {} from {}", repo_name, repo_url)
         return {
             "success": True,
