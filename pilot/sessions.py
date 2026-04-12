@@ -37,7 +37,7 @@ _RC_URL_PATTERN = re.compile(r"https://claude\.ai/code[/\?][A-Za-z0-9_=?&%-]+")
 _ANSI_ESCAPE = re.compile(r"\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
 
 # Seconds to wait for the RC URL to appear in the log file
-_URL_WAIT_SECONDS = 30
+_URL_WAIT_SECONDS = 60
 _POLL_INTERVAL = 0.3
 
 
