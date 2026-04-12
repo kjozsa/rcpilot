@@ -31,8 +31,12 @@ import tomllib as _tomllib
 
 def _read_version() -> str:
     pyproject = Path(__file__).parent.parent / "pyproject.toml"
-    with open(pyproject, "rb") as f:
-        return _tomllib.load(f)["project"]["version"]
+    try:
+        with open(pyproject, "rb") as f:
+            return _tomllib.load(f)["project"]["version"]
+    except Exception:
+        from importlib.metadata import version as pkg_version
+        return pkg_version("rcpilot")
 
 from pilot.config import Config, load_config
 from pilot.projects import list_projects
