@@ -17,6 +17,7 @@ Flow:
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import secrets
@@ -70,6 +71,37 @@ def _poll_log_for_url(log_path: Path, timeout: float) -> tuple[str | None, str]:
         time.sleep(_POLL_INTERVAL)
     text = log_path.read_text(errors="replace") if log_path.exists() else ""
     return None, _strip_ansi(text)
+
+
+_ENV_URL_PATTERN = re.compile(r"https://claude\.ai/code\?environment=(env_[A-Za-z0-9]+)")
+
+
+def _ensure_bridge_pointer(project_path: str, rc_url: str) -> None:
+    """
+    When a session starts as a new environment (?environment=...), Claude Code
+    won't create bridge-pointer.json automatically — it only does so when an
+    existing one is already present.  Without the file, every subsequent session
+    spawns a fresh environment instead of resuming the previous one, so the
+    --name flag never sticks in Claude.ai.
+
+    Create a minimal bridge-pointer.json with the environmentId so that the
+    NEXT rcpilot session finds it, connects to the same environment, and can
+    apply --name to an existing session.
+    """
+    env_match = _ENV_URL_PATTERN.search(rc_url)
+    if not env_match:
+        return  # Session URL (/session_...) — bridge-pointer already present
+
+    env_id = env_match.group(1)
+    project_dir_key = project_path.replace("/", "-")
+    bridge_path = Path.home() / ".claude" / "projects" / project_dir_key / "bridge-pointer.json"
+
+    if bridge_path.exists():
+        return  # Already present — Claude Code manages it from here
+
+    bridge_path.parent.mkdir(parents=True, exist_ok=True)
+    bridge_path.write_text(json.dumps({"sessionId": None, "environmentId": env_id, "source": "rcpilot"}))
+    logger.info("created bridge-pointer.json for {} env={}", project_path, env_id)
 
 
 def start_session(
@@ -130,6 +162,7 @@ def start_session(
         return {"status": "timed_out", "rc_url": None, "session_id": sid, "name": db_name}
 
     logger.info("RC URL captured: {}", url)
+    _ensure_bridge_pointer(project_path, url)
     return {"status": "running", "rc_url": url, "session_id": sid, "name": db_name}
 
 
@@ -137,17 +170,20 @@ def list_running_sessions(project: str, db_path: str) -> list[dict[str, Any]]:
     """
     Return all live running sessions for *project*.
     Auto-marks stale DB records (process gone) as stopped.
+    Imported sessions (no pid) are always considered alive.
     """
     records = db.list_running_sessions(db_path, project)
     result = []
     for record in records:
         pid = record.get("pid")
-        if pid and _pid_alive(pid):
+        is_imported = bool(record.get("imported"))
+        if is_imported or (pid and _pid_alive(pid)):
             result.append({
                 "id": record["id"],
                 "name": record["name"] or "",
                 "rc_url": record["rc_url"],
                 "status": "running",
+                "imported": is_imported,
             })
         else:
             logger.debug("stale running record {} — pid {} gone, marking stopped", record["id"], pid)
@@ -180,6 +216,7 @@ def kill_session(session_id: int, db_path: str) -> dict[str, Any]:
     """
     Terminate a session by SIGTERMing the script process group.
     Reads the log file for a snapshot before cleaning up.
+    Imported sessions have no pid; they are just marked stopped.
     """
     record = db.get_session_by_id(db_path, session_id)
     if not record:
@@ -207,3 +244,20 @@ def kill_session(session_id: int, db_path: str) -> dict[str, Any]:
     db.end_session(db_path, session_id, "stopped", snapshot)
     logger.info("kill_session: id={} pid={}", session_id, pid)
     return {"status": "stopped"}
+
+
+def import_session(
+    project: str,
+    rc_url: str,
+    db_name: str,
+    db_path: str,
+) -> dict[str, Any]:
+    """
+    Register an externally-started RC session (e.g. from the IDE) by its URL.
+    No process is spawned — the session is stored as imported with no pid.
+    """
+    logger.info("import_session: project={} db_name={!r} rc_url={}", project, db_name, rc_url)
+    sid = db.create_session(
+        db_path, project, db_name, pid=None, rc_url=rc_url, imported=True
+    )
+    return {"status": "running", "rc_url": rc_url, "session_id": sid, "name": db_name}
