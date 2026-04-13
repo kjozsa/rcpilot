@@ -407,6 +407,27 @@ def start_session(
     )
 
 
+@app.post("/api/sessions/{project}/import")
+def import_session(
+    project: str,
+    rc_url: str = Body(..., embed=True),
+    name: str = Body("", embed=True),
+) -> dict:
+    """Register an externally-started RC session by pasting its URL."""
+    _get_project_path(project)  # 404 if unknown project
+    rc_url = rc_url.strip()
+    if not rc_url:
+        raise HTTPException(status_code=422, detail="rc_url is required")
+    ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    db_name = name.strip() if name.strip() else ts
+    return session_mgr.import_session(
+        project=project,
+        rc_url=rc_url,
+        db_name=db_name,
+        db_path=str(_config.db_path),
+    )
+
+
 @app.post("/api/sessions/{project}/history/{session_id}/resume")
 def resume_session(
     project: str,

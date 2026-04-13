@@ -46,6 +46,8 @@ def _sweep(config: "Config") -> None:
     db_path = str(config.db_path)
     running = db.get_all_running_sessions(db_path)
     for record in running:
+        if record.get("imported"):
+            continue  # imported sessions have no pid — always considered alive
         pid = record.get("pid")
         if pid and _pid_alive(pid):
             continue

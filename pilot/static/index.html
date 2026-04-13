@@ -257,6 +257,7 @@
     button:not(:disabled):active { transform: scale(.94); opacity: .75; }
 
     .btn-connect   { background: rgba(62,207,142,.15); color: var(--green); border: 1px solid rgba(62,207,142,.4); box-shadow: 0 2px 8px rgba(62,207,142,.15); flex: 1; }
+    .btn-import-session { background: rgba(124,106,247,.12); color: var(--accent); border: 1px solid rgba(124,106,247,.35); font-weight: normal; flex-shrink: 0; white-space: nowrap; }
     .yolo-label    { display: flex; align-items: center; gap: .35rem; font-size: .78rem; color: var(--muted); cursor: pointer; user-select: none; }
     .yolo-label input[type=checkbox] { accent-color: var(--red); cursor: pointer; }
     .yolo-label:has(input:checked) { color: var(--red); }
@@ -933,6 +934,85 @@
       cursor: pointer;
     }
 
+    /* ── Import session modal ───────────────────────────────────────── */
+    #importsession-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.6);
+      z-index: 100;
+      align-items: flex-start;
+      padding-top: 15vh;
+    }
+    #importsession-overlay.open { display: flex; }
+
+    #importsession-sheet {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      width: calc(100% - 2rem);
+      margin: 0 1rem;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: .75rem;
+    }
+
+    #importsession-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    #importsession-title { font-size: .9rem; font-weight: 600; color: var(--text); }
+    #importsession-close {
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 1.3rem;
+      line-height: 1;
+      padding: .2rem .5rem;
+      cursor: pointer;
+    }
+    #importsession-close:hover { color: var(--text); opacity: 1; }
+
+    #importsession-url, #importsession-name {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: .6rem .75rem;
+      font-size: .95rem;
+      font-family: inherit;
+      width: 100%;
+    }
+    #importsession-url:focus { outline: none; border-color: var(--accent); }
+    #importsession-name:focus { outline: none; border-color: var(--accent); }
+
+    #importsession-footer {
+      display: flex;
+      gap: .5rem;
+      justify-content: flex-end;
+    }
+    #importsession-submit {
+      background: rgba(124,106,247,.15);
+      color: var(--accent);
+      border: 1px solid rgba(124,106,247,.4);
+      border-radius: var(--radius);
+      padding: .5rem 1.25rem;
+      font-size: .88rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    #importsession-cancel {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      border-radius: var(--radius);
+      padding: .5rem 1rem;
+      font-size: .88rem;
+      cursor: pointer;
+    }
+
     /* ── Import project modal ────────────────────────────────────────── */
     #import-overlay {
       display: none;
@@ -1041,6 +1121,7 @@
   @media (min-width: 640px) {
     /* Centered dialog modals: cap width and center */
     #newsession-sheet { max-width: 440px; margin: 0 auto; }
+    #importsession-sheet { max-width: 440px; margin: 0 auto; }
     #send-sheet       { max-width: 560px; margin: 0 auto; }
 
     /* Bottom-sheet modals: cap width, center, add side borders */
@@ -1182,6 +1263,20 @@
     </div>
   </div>
 </div>
+<div id="importsession-overlay" onclick="closeImportSession(event)">
+  <div id="importsession-sheet">
+    <div id="importsession-header">
+      <span id="importsession-title">Import session</span>
+      <button id="importsession-close" onclick="closeImportSession()">✕</button>
+    </div>
+    <input type="text" id="importsession-url" placeholder="https://claude.ai/code?..." autocomplete="off" />
+    <input type="text" id="importsession-name" placeholder="session name (optional)" autocomplete="off" />
+    <div id="importsession-footer">
+      <button id="importsession-cancel" onclick="closeImportSession()">Cancel</button>
+      <button id="importsession-submit" onclick="submitImportSession()">↗ Import</button>
+    </div>
+  </div>
+</div>
 <div id="import-overlay" onclick="closeImport(event)">
   <div id="import-sheet">
     <div id="import-header">
@@ -1227,6 +1322,12 @@
     setInterval(loadStats, 30_000);
     document.getElementById('newsession-name').addEventListener('keydown', e => {
       if (e.key === 'Enter') { e.preventDefault(); submitNewSession(); }
+    });
+    document.getElementById('importsession-url').addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); document.getElementById('importsession-name').focus(); }
+    });
+    document.getElementById('importsession-name').addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); submitImportSession(); }
     });
     document.getElementById('yolo-global').addEventListener('change', e => {
       if (e.target.checked) {
@@ -1293,6 +1394,7 @@
       <div class="running-sessions" id="running-${project.name}"></div>
       <div class="action-row" id="actions-${project.name}">
         <button class="btn-connect" onclick="openNewSession('${project.name}')" id="btn-connect-${project.name}">⚡ New Session</button>
+        <button class="btn-import-session" onclick="openImportSession('${project.name}')" id="btn-import-session-${project.name}" title="Import a session started in your IDE">↗ Import</button>
         ${project.has_git ? `<button class="btn-more" id="btn-more-${project.name}" onclick="toggleGitActions('${project.name}')">···</button>` : ''}
       </div>
       ${project.has_git ? `
@@ -1366,6 +1468,49 @@
       showError('Failed to start session: ' + err.message);
     } finally {
       if (btn) { btn.disabled = false; btn.textContent = '⚡ New Session'; }
+    }
+  }
+
+  // ── Import session modal ───────────────────────────────────────────────
+  let _importSessionProject = null;
+
+  function openImportSession(name) {
+    _importSessionProject = name;
+    document.getElementById('importsession-title').textContent = `Import session — ${name}`;
+    document.getElementById('importsession-url').value = '';
+    document.getElementById('importsession-name').value = '';
+    document.getElementById('importsession-overlay').classList.add('open');
+    document.body.style.overflow = 'hidden';
+    setTimeout(() => document.getElementById('importsession-url').focus(), 50);
+  }
+
+  function closeImportSession(e) {
+    if (e && e.target !== document.getElementById('importsession-overlay')) return;
+    document.getElementById('importsession-overlay').classList.remove('open');
+    document.body.style.overflow = '';
+    _importSessionProject = null;
+  }
+
+  async function submitImportSession() {
+    const urlInp = document.getElementById('importsession-url');
+    const nameInp = document.getElementById('importsession-name');
+    const rcUrl = urlInp.value.trim();
+    const sessionName = nameInp.value.trim();
+    const project = _importSessionProject;
+    if (!rcUrl) { urlInp.focus(); return; }
+    closeImportSession();
+
+    try {
+      const res = await fetch(`/api/sessions/${encodeURIComponent(project)}/import`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rc_url: rcUrl, name: sessionName }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      await refreshStatus(project);
+      await loadHistory(project);
+    } catch (err) {
+      showError('Failed to import session: ' + err.message);
     }
   }
 

@@ -31,7 +31,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     started_at    TEXT    NOT NULL,  -- ISO-8601 UTC
     ended_at      TEXT,              -- NULL while still running
     status        TEXT    NOT NULL DEFAULT 'running',
-    rc_url        TEXT               -- captured Remote-Control URL
+    rc_url        TEXT,              -- captured Remote-Control URL
+    imported      INTEGER NOT NULL DEFAULT 0  -- 1 if session was imported (started externally)
 )
 """
 
@@ -61,6 +62,8 @@ async def init_db(db_path: str) -> None:
             await db.execute("ALTER TABLE sessions ADD COLUMN pid INTEGER")
         if "log_path" not in col_names:
             await db.execute("ALTER TABLE sessions ADD COLUMN log_path TEXT")
+        if "imported" not in col_names:
+            await db.execute("ALTER TABLE sessions ADD COLUMN imported INTEGER NOT NULL DEFAULT 0")
         await db.commit()
 
 
@@ -85,13 +88,14 @@ def create_session(
     pid: int | None,
     rc_url: str | None,
     log_path: str | None = None,
+    imported: bool = False,
 ) -> int:
     """Insert a new running session row; return its id."""
     with _connect(db_path) as conn:
         cur = conn.execute(
-            "INSERT INTO sessions (project, name, pid, log_path, started_at, status, rc_url) "
-            "VALUES (?, ?, ?, ?, ?, 'running', ?)",
-            (project, name, pid, log_path, _now(), rc_url),
+            "INSERT INTO sessions (project, name, pid, log_path, started_at, status, rc_url, imported) "
+            "VALUES (?, ?, ?, ?, ?, 'running', ?, ?)",
+            (project, name, pid, log_path, _now(), rc_url, 1 if imported else 0),
         )
         conn.commit()
         return cur.lastrowid  # type: ignore[return-value]
