@@ -1975,12 +1975,28 @@
     const windows = data.windows || {};
     const models  = data.models  || {};
     const utilization = windows['5h'] ?? 0;
+
+    // Hide widget if data is stale beyond the 5h window (definitely wrong)
+    const updatedAt = data.updated_at ? new Date(data.updated_at) : null;
+    const ageMs = updatedAt ? Date.now() - updatedAt.getTime() : Infinity;
+    const FIVE_HOURS_MS = 5 * 60 * 60 * 1000;
+    const STALE_MS = 30 * 60 * 1000;
+    if (ageMs >= FIVE_HOURS_MS) {
+      widget.style.display = 'none';
+      return;
+    }
     widget.style.display = 'flex';
+
+    const stale = ageMs >= STALE_MS;
+    widget.style.opacity = stale ? '0.45' : '';
+    widget.title = stale
+      ? `Stale data — last updated ${Math.round(ageMs / 60000)}m ago`
+      : '';
 
     const pct   = Math.round(utilization * 100);
     const fill  = document.getElementById('usage-fill');
     const label = document.getElementById('usage-pct');
-    label.textContent = `${pct}%`;
+    label.textContent = stale ? `~${pct}%` : `${pct}%`;
     fill.style.width = `${pct}%`;
 
     const total = Object.values(models).reduce((a, b) => a + b, 0);
