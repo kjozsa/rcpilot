@@ -123,7 +123,10 @@
       font-family: monospace;
       color: #555a7a;
       margin-left: .2rem;
+      cursor: pointer;
     }
+    .git-hash:hover { color: var(--muted); }
+    .git-log-icon { opacity: .6; font-size: .7rem; color: var(--muted); }
 
     .git-diff-stat {
       font-size: .75rem;
@@ -653,6 +656,64 @@
     .git-diff-stat:hover { color: var(--text); }
     .git-synced { font-size: .75rem; color: var(--green); margin-top: .3rem; opacity: .6; }
 
+    #log-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.6);
+      z-index: 100;
+      align-items: flex-start;
+      padding-top: 10vh;
+    }
+    #log-overlay.open { display: flex; }
+
+    #log-sheet {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      width: calc(100% - 2rem);
+      margin: 0 1rem;
+      max-height: 80vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    #log-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: .6rem 1rem;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    #log-title { font-size: .9rem; font-weight: 600; color: var(--text); }
+    #log-close {
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 1.3rem;
+      line-height: 1;
+      padding: .2rem .5rem;
+      cursor: pointer;
+    }
+    #log-close:hover { color: var(--text); opacity: 1; }
+
+    #log-body {
+      overflow-y: auto;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: .5rem .75rem;
+      flex: 1;
+    }
+    #log-body pre {
+      font-family: ui-monospace, monospace;
+      font-size: .65rem;
+      line-height: 1.6;
+      white-space: pre;
+      margin: 0;
+      color: var(--muted);
+    }
+
     /* ── Rename & log buttons in history table ───────────────────────── */
     .btn-rename {
       background: none;
@@ -1013,6 +1074,73 @@
       cursor: pointer;
     }
 
+    /* ── Stash confirm popup ─────────────────────────────────────────── */
+    #stash-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.6);
+      z-index: 100;
+      align-items: flex-start;
+      padding-top: 15vh;
+    }
+    #stash-overlay.open { display: flex; }
+
+    #stash-sheet {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      width: calc(100% - 2rem);
+      margin: 0 1rem;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: .75rem;
+    }
+    @media (min-width: 480px) { #stash-sheet { max-width: 400px; margin: 0 auto; } }
+
+    #stash-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    #stash-title { font-size: .9rem; font-weight: 600; color: var(--text); }
+    #stash-close {
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 1.3rem;
+      line-height: 1;
+      padding: .2rem .5rem;
+      cursor: pointer;
+    }
+    #stash-close:hover { color: var(--text); opacity: 1; }
+    #stash-msg { font-size: .88rem; color: var(--muted); line-height: 1.5; }
+    #stash-footer {
+      display: flex;
+      gap: .5rem;
+      justify-content: flex-end;
+    }
+    #stash-confirm {
+      background: rgba(62,207,142,.15);
+      color: var(--green);
+      border: 1px solid rgba(62,207,142,.4);
+      border-radius: var(--radius);
+      padding: .5rem 1.25rem;
+      font-size: .88rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    #stash-cancel {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      border-radius: var(--radius);
+      padding: .5rem 1rem;
+      font-size: .88rem;
+      cursor: pointer;
+    }
+
     /* ── Import project modal ────────────────────────────────────────── */
     #import-overlay {
       display: none;
@@ -1200,6 +1328,15 @@
     <div id="ticker-log-body"></div>
   </div>
 </div>
+<div id="log-overlay" onclick="closeLog(event)">
+  <div id="log-sheet">
+    <div id="log-header">
+      <span id="log-title">git log</span>
+      <button id="log-close" onclick="closeLog()">✕</button>
+    </div>
+    <div id="log-body"><pre id="log-pre"></pre></div>
+  </div>
+</div>
 <div id="diff-overlay" onclick="closeDiff(event)">
   <div id="diff-sheet">
     <div id="diff-header">
@@ -1274,6 +1411,19 @@
     <div id="importsession-footer">
       <button id="importsession-cancel" onclick="closeImportSession()">Cancel</button>
       <button id="importsession-submit" onclick="submitImportSession()">↗ Import</button>
+    </div>
+  </div>
+</div>
+<div id="stash-overlay" onclick="closeStashConfirm(event)">
+  <div id="stash-sheet">
+    <div id="stash-header">
+      <span id="stash-title">Pending changes</span>
+      <button id="stash-close" onclick="closeStashConfirm()">✕</button>
+    </div>
+    <p id="stash-msg">You have uncommitted changes. Stash them, pull, then restore?</p>
+    <div id="stash-footer">
+      <button id="stash-cancel" onclick="closeStashConfirm()">Cancel</button>
+      <button id="stash-confirm" onclick="confirmStashPull()">Stash &amp; Pull ⬇</button>
     </div>
   </div>
 </div>
@@ -1386,7 +1536,7 @@
         <div class="project-name">
           ${escHtml(project.name)}
           ${project.git_branch ? `<span class="git-badge">${escHtml(project.git_branch)}</span>` : (project.has_git ? '<span class="git-badge">git</span>' : '')}
-          ${project.git_hash ? `<span class="git-hash">${escHtml(project.git_hash)}${project.git_commit_time ? ' · ' + fmtAgo(new Date(project.git_commit_time)) : ''}</span>` : ''}
+          ${project.git_hash ? `<span class="git-hash" onclick="showLog('${project.name}')">${escHtml(project.git_hash)}${project.git_commit_time ? ' · ' + fmtAgo(new Date(project.git_commit_time)) : ''} <span class="git-log-icon">≡</span></span>` : ''}
         </div>
         <span class="status-badge status-loading" id="badge-${project.name}">…</span>
       </div>
@@ -2056,12 +2206,58 @@
     else { banner.style.display = 'none'; }
   }
 
+  let _stashPullBtn = null;
+  let _stashPullProject = null;
+
   async function gitPull(btn, name) {
     btn.disabled = true;
     btn.textContent = 'Pulling…';
     btn.classList.remove('ok', 'err');
     try {
       const res = await fetch(`/api/projects/${encodeURIComponent(name)}/git-pull`, { method: 'POST' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (data.needs_stash) {
+        btn.disabled = false;
+        btn.textContent = 'Pull ⬇';
+        _stashPullBtn = btn;
+        _stashPullProject = name;
+        document.getElementById('stash-overlay').classList.add('open');
+        return;
+      }
+      if (data.returncode === 0) {
+        btn.textContent = '✓ Pulled';
+        btn.classList.add('ok');
+      } else {
+        btn.textContent = '✗ Error';
+        btn.classList.add('err');
+        showError(`git pull failed: ${data.stderr || data.stdout}`);
+      }
+    } catch (err) {
+      btn.textContent = '✗ Error';
+      btn.classList.add('err');
+      showError('git pull failed: ' + err.message);
+    } finally {
+      btn.disabled = false;
+      setTimeout(() => { btn.textContent = 'Pull ⬇'; btn.classList.remove('ok', 'err'); }, 3000);
+    }
+  }
+
+  function closeStashConfirm(e) {
+    if (e && e.target !== document.getElementById('stash-overlay')) return;
+    document.getElementById('stash-overlay').classList.remove('open');
+  }
+
+  async function confirmStashPull() {
+    document.getElementById('stash-overlay').classList.remove('open');
+    const btn = _stashPullBtn;
+    const name = _stashPullProject;
+    if (!btn || !name) return;
+    btn.disabled = true;
+    btn.textContent = 'Stashing…';
+    btn.classList.remove('ok', 'err');
+    try {
+      const res = await fetch(`/api/projects/${encodeURIComponent(name)}/git-pull?stash=true`, { method: 'POST' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       if (data.returncode === 0) {
@@ -2080,6 +2276,28 @@
       btn.disabled = false;
       setTimeout(() => { btn.textContent = 'Pull ⬇'; btn.classList.remove('ok', 'err'); }, 3000);
     }
+  }
+
+  async function showLog(name) {
+    document.getElementById('log-title').textContent = `git log — ${name}`;
+    const pre = document.getElementById('log-pre');
+    pre.innerHTML = '<span style="color:var(--muted)">Loading…</span>';
+    document.getElementById('log-overlay').classList.add('open');
+    document.body.style.overflow = 'hidden';
+    try {
+      const res = await fetch(`/api/projects/${encodeURIComponent(name)}/git-log`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const { log } = await res.json();
+      pre.textContent = log || '(no commits)';
+    } catch (err) {
+      pre.innerHTML = `<span style="color:var(--red)">Error: ${escHtml(err.message)}</span>`;
+    }
+  }
+
+  function closeLog(e) {
+    if (e && e.target !== document.getElementById('log-overlay')) return;
+    document.getElementById('log-overlay').classList.remove('open');
+    document.body.style.overflow = '';
   }
 
   async function showDiff(name) {
@@ -2126,7 +2344,7 @@
   }
 
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') { closeDiff(); closeSnapshot(); closeSend(); closePRReview(); closeNewSession(); closeTickerLog(); closeImport(); }
+    if (e.key === 'Escape') { closeLog(); closeDiff(); closeSnapshot(); closeSend(); closePRReview(); closeNewSession(); closeTickerLog(); closeImport(); }
   });
 
   function openImport() {

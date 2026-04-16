@@ -18,6 +18,7 @@ Routes (all sync — FastAPI runs them in a thread pool):
 from __future__ import annotations
 
 import datetime
+import subprocess
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -190,9 +191,21 @@ def get_projects(sort_by: str = "modified") -> list[dict]:
     return list_projects(_config.projects_dir, sort_by=sort_by)  # type: ignore[return-value]
 
 
+@app.get("/api/projects/{project}/git-log")
+def git_log(project: str) -> dict:
+    path = _get_project_path(project)
+    result = subprocess.run(
+        ["git", "log", "--oneline", "--graph", "--decorate", "-50"],
+        cwd=path,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    return {"log": result.stdout}
+
+
 @app.get("/api/projects/{project}/git-diff")
 def git_diff(project: str) -> dict:
-    import subprocess
     path = _get_project_path(project)
     result = subprocess.run(
         ["git", "diff"],
@@ -210,7 +223,6 @@ def run_claude(
     prompt: str = Body(..., embed=True),
 ) -> dict:
     """Run ``claude -p <prompt>`` in the project directory and return the output."""
-    import subprocess
     path = _get_project_path(project)
     result = subprocess.run(
         ["claude", "-p", "--dangerously-skip-permissions", prompt],
@@ -238,7 +250,6 @@ def review_pr(
     launch the claude process detached and return immediately rather than
     waiting up to several minutes for it to finish.
     """
-    import subprocess
     path = _get_project_path(project)
     subprocess.Popen(
         ["claude", "-p", f"/code-review:code-review {pr_number}"],
@@ -255,9 +266,39 @@ def review_pr(
 
 
 @app.post("/api/projects/{project}/git-pull")
-def git_pull(project: str) -> dict:
-    import subprocess
+def git_pull(project: str, stash: bool = False) -> dict:
     path = _get_project_path(project)
+
+    # Check for pending changes
+    status = subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=path,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    has_changes = bool(status.stdout.strip())
+
+    if has_changes and not stash:
+        return {"needs_stash": True}
+
+    stash_applied = False
+    if has_changes and stash:
+        stash_result = subprocess.run(
+            ["git", "stash"],
+            cwd=path,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        if stash_result.returncode != 0:
+            return {
+                "returncode": stash_result.returncode,
+                "stdout": stash_result.stdout.strip(),
+                "stderr": stash_result.stderr.strip(),
+            }
+        stash_applied = True
+
     result = subprocess.run(
         ["git", "pull", "--rebase"],
         cwd=path,
@@ -273,6 +314,25 @@ def git_pull(project: str) -> dict:
             capture_output=True,
             timeout=10,
         )
+
+    if stash_applied:
+        pop_result = subprocess.run(
+            ["git", "stash", "pop"],
+            cwd=path,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        pop_stdout = pop_result.stdout.strip()
+        pop_stderr = pop_result.stderr.strip()
+        combined_stdout = "\n".join(filter(None, [result.stdout.strip(), pop_stdout]))
+        combined_stderr = "\n".join(filter(None, [result.stderr.strip(), pop_stderr]))
+        return {
+            "returncode": result.returncode if result.returncode != 0 else pop_result.returncode,
+            "stdout": combined_stdout,
+            "stderr": combined_stderr,
+        }
+
     return {
         "returncode": result.returncode,
         "stdout": result.stdout.strip(),
@@ -311,7 +371,6 @@ def import_project(
     repo_url: str = Body(..., embed=True),
 ) -> dict:
     """Clone a GitHub repository into the projects directory."""
-    import subprocess
     import re
     
     # Validate GitHub URL format
