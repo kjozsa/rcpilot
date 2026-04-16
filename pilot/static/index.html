@@ -2272,21 +2272,31 @@
   function renderStats(data) {
     const widget  = document.getElementById('usage-widget');
     const windows = data.windows || {};
+    const resets  = data.resets  || {};
     const models  = data.models  || {};
-    const utilization = windows['5h'] ?? 0;
 
-    // Hide widget if data is stale beyond the 5h window (definitely wrong)
     const updatedAt = data.updated_at ? new Date(data.updated_at) : null;
-    const ageMs = updatedAt ? Date.now() - updatedAt.getTime() : Infinity;
+    if (!updatedAt) { widget.style.display = 'none'; return; }
+
+    const ageMs = Date.now() - updatedAt.getTime();
     const FIVE_HOURS_MS = 5 * 60 * 60 * 1000;
     const STALE_MS = 30 * 60 * 1000;
-    if (ageMs >= FIVE_HOURS_MS) {
+
+    // If the reset timestamp from the last response header is already in the past,
+    // a new window has started — show 0% (accurate, not stale).
+    const resetAt = resets['5h'] ? new Date(resets['5h']) : null;
+    const windowExpired = resetAt && Date.now() >= resetAt.getTime();
+
+    // No reset info and data is older than 5h — hide (can't determine window)
+    if (!windowExpired && ageMs >= FIVE_HOURS_MS) {
       widget.style.display = 'none';
       return;
     }
     widget.style.display = 'flex';
 
-    const stale = ageMs >= STALE_MS;
+    const utilization = windowExpired ? 0 : (windows['5h'] ?? 0);
+    const stale = !windowExpired && ageMs >= STALE_MS;
+
     widget.style.opacity = stale ? '0.45' : '';
     widget.title = stale
       ? `Stale data — last updated ${Math.round(ageMs / 60000)}m ago`
@@ -2298,16 +2308,20 @@
     label.textContent = stale ? `~${pct}%` : `${pct}%`;
     fill.style.width = `${pct}%`;
 
-    const total = Object.values(models).reduce((a, b) => a + b, 0);
-    if (total > 0) {
-      fill.innerHTML = Object.entries(models)
-        .sort((a, b) => b[1] - a[1])
-        .map(([m, n]) => {
-          const share = (n / total * 100).toFixed(1);
-          return `<div class="model-segment model-seg-${_modelShort(m)}" style="width:${share}%" title="${_modelShort(m)} ${Math.round(share)}%"></div>`;
-        }).join('');
-    } else {
+    if (windowExpired || pct === 0) {
       fill.innerHTML = `<div class="model-segment model-seg-sonnet" style="width:100%"></div>`;
+    } else {
+      const total = Object.values(models).reduce((a, b) => a + b, 0);
+      if (total > 0) {
+        fill.innerHTML = Object.entries(models)
+          .sort((a, b) => b[1] - a[1])
+          .map(([m, n]) => {
+            const share = (n / total * 100).toFixed(1);
+            return `<div class="model-segment model-seg-${_modelShort(m)}" style="width:${share}%" title="${_modelShort(m)} ${Math.round(share)}%"></div>`;
+          }).join('');
+      } else {
+        fill.innerHTML = `<div class="model-segment model-seg-sonnet" style="width:100%"></div>`;
+      }
     }
   }
 
