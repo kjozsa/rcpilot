@@ -35,6 +35,10 @@
       max-width: 640px;
       margin: 0 auto;
     }
+    @media (min-width: 768px) {
+      body { max-width: 1280px; }
+      footer { max-width: 640px; margin-left: auto; margin-right: auto; }
+    }
 
     /* ── Footer ──────────────────────────────────────────────────────── */
     footer {
@@ -85,7 +89,12 @@
     header h1 span { color: var(--accent); }
 
 /* ── Project cards ───────────────────────────────────────────────── */
-    #project-list { display: flex; flex-direction: column; gap: var(--gap); }
+    #project-list { display: block; }
+    .project-card { margin-bottom: var(--gap); }
+    @media (min-width: 768px) {
+      #project-list { columns: 2; column-gap: var(--gap); }
+      .project-card { break-inside: avoid; }
+    }
 
     .project-card {
       background: var(--surface);
