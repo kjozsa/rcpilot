@@ -1245,6 +1245,117 @@
       font-weight: 900;
     }
 
+  /* ── Settings modal ──────────────────────────────────────────────── */
+    #settings-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.6);
+      z-index: 100;
+      align-items: flex-start;
+      padding-top: 8vh;
+      overflow-y: auto;
+    }
+    #settings-overlay.open { display: flex; }
+
+    #settings-sheet {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      width: calc(100% - 2rem);
+      max-width: 500px;
+      margin: 0 auto 2rem;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: .75rem;
+    }
+
+    #settings-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    #settings-title { font-size: .9rem; font-weight: 600; color: var(--text); }
+    #settings-close {
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 1.3rem;
+      line-height: 1;
+      padding: .2rem .5rem;
+      cursor: pointer;
+    }
+    #settings-close:hover { color: var(--text); }
+
+    .settings-field {
+      display: flex;
+      flex-direction: column;
+      gap: .3rem;
+    }
+    .settings-label {
+      font-size: .78rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+    .settings-hint {
+      font-size: .72rem;
+      color: var(--muted);
+      opacity: .7;
+    }
+    .settings-input {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: .5rem .75rem;
+      font-size: .88rem;
+      font-family: ui-monospace, monospace;
+      width: 100%;
+    }
+    .settings-input:focus { outline: none; border-color: var(--accent); }
+
+    #settings-footer {
+      display: flex;
+      gap: .5rem;
+      justify-content: flex-end;
+    }
+    #settings-save {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius);
+      padding: .5rem 1.25rem;
+      font-size: .88rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    #settings-save:disabled { opacity: .4; cursor: default; }
+    #settings-cancel {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      border-radius: var(--radius);
+      padding: .5rem 1rem;
+      font-size: .88rem;
+      cursor: pointer;
+    }
+
+    .btn-settings {
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 1.15rem;
+      cursor: pointer;
+      padding: .2rem .4rem;
+      line-height: 1;
+      opacity: .7;
+      transition: opacity .15s;
+    }
+    .btn-settings:hover { opacity: 1; color: var(--text); }
+
   /* ── Desktop refinements ─────────────────────────────────────────── */
   @media (min-width: 640px) {
     /* Centered dialog modals: cap width and center */
@@ -1306,6 +1417,7 @@
     <label class="yolo-label"><input type="checkbox" id="yolo-global" checked> YOLO</label>
     <div style="display:flex;gap:.5rem;align-items:center">
       <button class="btn-import" onclick="openImport()" title="Import from GitHub"></button>
+      <button class="btn-settings" onclick="openSettings()" title="Settings">⚙</button>
       <div class="sort-toggle">
         <span class="sort-label">Sort:</span>
         <button class="sort-btn" id="sort-modified" onclick="setSortOrder('modified')">Recent</button>
@@ -1440,6 +1552,43 @@
     <div id="import-footer">
       <button id="import-cancel" onclick="closeImport()">Cancel</button>
       <button id="import-submit" onclick="submitImport()">Import</button>
+    </div>
+  </div>
+</div>
+<div id="settings-overlay" onclick="closeSettings(event)">
+  <div id="settings-sheet">
+    <div id="settings-header">
+      <span id="settings-title">Settings</span>
+      <button id="settings-close" onclick="closeSettings()">✕</button>
+    </div>
+    <div class="settings-field">
+      <label class="settings-label" for="cfg-projects-dir">Projects directory</label>
+      <input type="text" id="cfg-projects-dir" class="settings-input" placeholder="~/projects" />
+      <span class="settings-hint">Directory scanned for projects — each subdirectory is a project.</span>
+    </div>
+    <div class="settings-field">
+      <label class="settings-label" for="cfg-window-cron">Code window cron</label>
+      <input type="text" id="cfg-window-cron" class="settings-input" placeholder="0 7,12,17 * * *" />
+      <span class="settings-hint">Fires "claude -p hi" to start the 5-hour usage window. Leave empty to disable.</span>
+    </div>
+    <div class="settings-field">
+      <label class="settings-label" for="cfg-update-cron">Auto-update cron</label>
+      <input type="text" id="cfg-update-cron" class="settings-input" placeholder="0 6,18 * * *" />
+      <span class="settings-hint">Schedule for auto-updating the Claude CLI.</span>
+    </div>
+    <div class="settings-field">
+      <label class="settings-label" for="cfg-host">Host</label>
+      <input type="text" id="cfg-host" class="settings-input" placeholder="0.0.0.0" />
+      <span class="settings-hint">Uvicorn bind host. Use 0.0.0.0 to listen on all interfaces.</span>
+    </div>
+    <div class="settings-field">
+      <label class="settings-label" for="cfg-port">Port</label>
+      <input type="number" id="cfg-port" class="settings-input" placeholder="8000" min="1" max="65535" />
+      <span class="settings-hint">Uvicorn server port.</span>
+    </div>
+    <div id="settings-footer">
+      <button id="settings-cancel" onclick="closeSettings()">Cancel</button>
+      <button id="settings-save" onclick="saveSettings()">Save</button>
     </div>
   </div>
 </div>
@@ -2398,6 +2547,69 @@
         btn.disabled = false;
         btn.textContent = originalText;
       }
+    }
+  }
+
+  // ── Settings modal ─────────────────────────────────────────────────────
+  async function openSettings() {
+    document.getElementById('settings-overlay').classList.add('open');
+    document.body.style.overflow = 'hidden';
+    const btn = document.getElementById('settings-save');
+    btn.disabled = true;
+    btn.textContent = 'Loading…';
+    try {
+      const res = await fetch('/api/config');
+      const cfg = await res.json();
+      document.getElementById('cfg-projects-dir').value = cfg.projects_dir || '';
+      document.getElementById('cfg-window-cron').value  = cfg.window_cron || '';
+      document.getElementById('cfg-update-cron').value  = cfg.claude_update_cron || '';
+      document.getElementById('cfg-port').value         = cfg.port || '';
+      document.getElementById('cfg-host').value         = cfg.host || '';
+    } catch (err) {
+      showError('Failed to load config: ' + err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Save';
+    }
+  }
+
+  function closeSettings(e) {
+    if (e && e.target !== document.getElementById('settings-overlay')) return;
+    document.getElementById('settings-overlay').classList.remove('open');
+    document.body.style.overflow = '';
+  }
+
+  async function saveSettings() {
+    const btn = document.getElementById('settings-save');
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+    showError(null);
+    const body = {
+      projects_dir:       document.getElementById('cfg-projects-dir').value.trim(),
+      window_cron:        document.getElementById('cfg-window-cron').value.trim(),
+      claude_update_cron: document.getElementById('cfg-update-cron').value.trim(),
+      port:               parseInt(document.getElementById('cfg-port').value.trim(), 10),
+      host:               document.getElementById('cfg-host').value.trim(),
+    };
+    try {
+      const res = await fetch('/api/config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `HTTP ${res.status}`);
+      }
+      document.getElementById('settings-overlay').classList.remove('open');
+      document.body.style.overflow = '';
+      if (confirm('Settings saved. Restart the service now to apply changes?')) {
+        await fetch('/api/restart', { method: 'POST' });
+      }
+    } catch (err) {
+      showError('Save failed: ' + err.message);
+      btn.disabled = false;
+      btn.textContent = 'Save';
     }
   }
 

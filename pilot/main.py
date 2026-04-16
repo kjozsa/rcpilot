@@ -174,6 +174,83 @@ def trigger_update() -> dict:
     return {"ok": True}
 
 
+def _get_config_path() -> Path:
+    import os
+    from pilot.config import DEFAULT_CONFIG_PATH
+    env_path = os.environ.get("PILOT_CONFIG")
+    return Path(env_path) if env_path else DEFAULT_CONFIG_PATH
+
+
+def _update_config_toml(updates: dict) -> None:
+    """Update specific keys in the TOML config file, preserving comments."""
+    import re
+    path = _get_config_path()
+    lines = path.read_text().splitlines(keepends=True) if path.exists() else []
+    written_keys: set[str] = set()
+    result = []
+    for line in lines:
+        m = re.match(r'^(\w+)\s*=', line)
+        if m and m.group(1) in updates:
+            key = m.group(1)
+            val = updates[key]
+            result.append(f'{key} = "{val}"\n' if isinstance(val, str) else f'{key} = {val}\n')
+            written_keys.add(key)
+        else:
+            result.append(line)
+    for key, val in updates.items():
+        if key not in written_keys:
+            result.append(f'{key} = "{val}"\n' if isinstance(val, str) else f'{key} = {val}\n')
+    path.write_text(''.join(result))
+
+
+@app.get("/api/config")
+def get_config_values() -> dict:
+    """Return current configuration values."""
+    return {
+        "projects_dir": str(_config.projects_dir),
+        "host": _config.host,
+        "port": _config.port,
+        "db_path": str(_config.db_path),
+        "window_cron": _config.window_cron,
+        "claude_update_cron": _config.claude_update_cron,
+    }
+
+
+@app.post("/api/restart")
+def restart_service() -> dict:
+    """Schedule a service restart in 1 second so the HTTP response is delivered first."""
+    import threading
+    import time
+
+    def _do_restart() -> None:
+        time.sleep(1)
+        subprocess.Popen(
+            ["systemctl", "--user", "restart", "rcpilot.service"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+    threading.Thread(target=_do_restart, daemon=True).start()
+    return {"ok": True}
+
+
+@app.put("/api/config")
+def update_config_values(body: dict = Body(...)) -> dict:
+    """Persist updated config values to the TOML file. Restart required to take effect."""
+    allowed = {"projects_dir", "host", "port", "window_cron", "claude_update_cron"}
+    updates = {k: v for k, v in body.items() if k in allowed}
+    if not updates:
+        raise HTTPException(status_code=422, detail="No valid fields provided")
+    # Coerce port to int if present
+    if "port" in updates:
+        try:
+            updates["port"] = int(updates["port"])
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=422, detail="port must be an integer")
+    _update_config_toml(updates)
+    return {"ok": True}
+
+
 @app.get("/api/ticker")
 def get_ticker() -> dict:
     """Return window ticker state: configured times, last fired, next window."""
