@@ -74,6 +74,7 @@ def _poll_log_for_url(log_path: Path, timeout: float) -> tuple[str | None, str]:
 
 
 _ENV_URL_PATTERN = re.compile(r"https://claude\.ai/code\?environment=(env_[A-Za-z0-9]+)")
+_SESSION_URL_PATTERN = re.compile(r"https://claude\.ai/code/(session_[A-Za-z0-9]+)")
 
 
 def _ensure_bridge_pointer(project_path: str, rc_url: str) -> None:
@@ -87,15 +88,32 @@ def _ensure_bridge_pointer(project_path: str, rc_url: str) -> None:
     Create a minimal bridge-pointer.json with the environmentId so that the
     NEXT rcpilot session finds it, connects to the same environment, and can
     apply --name to an existing session.
-    """
-    env_match = _ENV_URL_PATTERN.search(rc_url)
-    if not env_match:
-        return  # Session URL (/session_...) — bridge-pointer already present
 
-    env_id = env_match.group(1)
+    When a session URL is returned, update the sessionId in bridge-pointer.json
+    so subsequent sessions resume properly and --name sticks.
+    """
     project_dir_key = project_path.replace("/", "-")
     bridge_path = Path.home() / ".claude" / "projects" / project_dir_key / "bridge-pointer.json"
 
+    session_match = _SESSION_URL_PATTERN.search(rc_url)
+    if session_match:
+        session_id = session_match.group(1)
+        if bridge_path.exists():
+            try:
+                data = json.loads(bridge_path.read_text())
+            except Exception:
+                data = {}
+            if data.get("sessionId") != session_id:
+                data["sessionId"] = session_id
+                bridge_path.write_text(json.dumps(data))
+                logger.info("updated bridge-pointer.json sessionId={} for {}", session_id, project_path)
+        return
+
+    env_match = _ENV_URL_PATTERN.search(rc_url)
+    if not env_match:
+        return
+
+    env_id = env_match.group(1)
     if bridge_path.exists():
         return  # Already present — Claude Code manages it from here
 
