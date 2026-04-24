@@ -6,7 +6,7 @@ Self-hosted session manager for [Claude Code Remote Control](https://docs.anthro
 Run it on a Raspberry Pi (or any always-on machine) and get a mobile-friendly web UI to launch,
 reconnect to, and manage your coding sessions from anywhere.
 
-![rcpilot on mobile](docs/screenshot.png)
+<img src="docs/screenshot.png" width="270" alt="rcpilot main view"> <img src="docs/screenshot2.png" width="270" alt="rcpilot project actions">
 
 ---
 
