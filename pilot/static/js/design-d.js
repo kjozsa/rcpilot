@@ -183,9 +183,7 @@
   }
   header .yolo-label input { margin: 0; accent-color: var(--red); }
   header .yolo-label::before {
-    content: '🔥';
-    filter: grayscale(1) brightness(1.2);
-    margin-right: .1rem;
+    content: '';
   }
   header .btn-import, header .btn-settings {
     width: 26px; height: 26px;
@@ -773,7 +771,7 @@
         // Preserve the checkbox node
         const cb = yoloInput;
         yoloLabel.childNodes.forEach(n => {
-          if (n.nodeType === 3) n.textContent = cb.checked ? ' YOLO ON' : ' YOLO';
+          if (n.nodeType === 3) n.textContent = ' YOLO';
         });
       };
       syncYolo();
