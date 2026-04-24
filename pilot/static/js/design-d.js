@@ -29,8 +29,9 @@
   .project-card .git-diff-stat,
   .project-card .git-synced,
   .project-card .running-sessions,
-  .project-card .session-history,
   .project-card > .status-badge { display: none !important; }
+
+  .project-card .session-history { display: none !important; }
 
   /* Force single-column project list so panes span full width */
   #project-list {
@@ -437,6 +438,36 @@
   #dsheet .ds-overflow button .hint { margin-left: auto; color: var(--muted); font-size: .7rem; }
   #dsheet .ds-overflow button.danger { color: var(--red); }
 
+  #dsheet .dsh-back {
+    background: none; border: none; color: var(--cyan);
+    font-family: inherit; font-size: .8rem; cursor: pointer; padding: 0;
+  }
+
+  .dsh-hist-row {
+    display: flex; flex-direction: column; gap: .2rem;
+    padding: .5rem 0;
+    border-top: 1px solid var(--border);
+    font-size: .78rem;
+  }
+  .dsh-hist-row:first-child { border-top: none; }
+  .dsh-hist-name { display: flex; align-items: center; gap: .35rem; min-width: 0; }
+  .dsh-hist-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-weight: 600; }
+  .dsh-hist-meta { color: var(--muted); font-size: .7rem; }
+  .dsh-hist-actions { display: flex; align-items: center; gap: .35rem; flex-wrap: wrap; }
+  .dsh-hist-btn {
+    background: none; border: 1px solid var(--border);
+    border-radius: 5px; padding: .15rem .45rem;
+    font-size: .68rem; cursor: pointer; color: var(--muted); font-family: inherit;
+  }
+  .dsh-hist-btn:hover { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 35%, transparent); }
+  .dsh-hist-more {
+    display: block; width: 100%; margin-top: .5rem;
+    background: none; border: none; color: var(--muted);
+    font-family: inherit; font-size: .75rem; cursor: pointer;
+    text-align: left; padding: .25rem 0;
+    border-top: 1px solid var(--border);
+  }
+
   #dsheet .ds-foot {
     display: flex; align-items: center;
     padding-top: .55rem; margin-top: .25rem;
@@ -603,15 +634,83 @@
       <div class="ds-overflow ${_overflowOpen ? 'open' : ''}" id="ds-overflow">
         <button onclick="closeSheetD(); showLog('${esc(name)}')">≡ <span>git log</span><span class="hint">${p.git_hash ? esc(p.git_hash) : ''}</span></button>
         ${p.has_git ? `<button onclick="closeSheetD(); showDiff('${esc(name)}')">± <span>show diff</span><span class="hint">${esc(diff || 'clean')}</span></button>` : ''}
-        <button onclick="closeSheetD(); loadHistory('${esc(name)}'); toggleHistory('${esc(name)}')">⏱ <span>session history</span><span class="hint">view all</span></button>
+        <button onclick="showHistoryInSheet('${esc(name)}')">⏱ <span>session history</span><span class="hint">view all</span></button>
       </div>
 
       <div class="ds-foot">
         <span>rpi4 · watchdog ok</span>
-        <button class="hist-view" onclick="closeSheetD(); loadHistory('${esc(name)}'); toggleHistory('${esc(name)}')">history →</button>
+        <button class="hist-view" onclick="showHistoryInSheet('${esc(name)}')">history →</button>
       </div>
     `;
     document.getElementById('dsheet').innerHTML = html;
+  }
+
+  /* ── History sub-view in sheet ────────────────────────────────────── */
+  window.showHistoryInSheet = async function (name) {
+    if (!document.getElementById('dsheet-overlay').classList.contains('open')) {
+      _sheetProject = name;
+      document.getElementById('dsheet-overlay').classList.add('open');
+      document.body.style.overflow = 'hidden';
+    }
+    const esc = window.escHtml;
+    const dsheet = document.getElementById('dsheet');
+    dsheet.innerHTML = `
+      <div class="ds-head">
+        <button class="dsh-back" onclick="renderSheetDRefresh()">← back</button>
+        <span class="name">${esc(name)}</span>
+        <span style="color:var(--muted);font-size:.72rem">/ history</span>
+        <button class="x" onclick="closeSheetD()">✕</button>
+      </div>
+      <div id="dsh-hist-body" style="color:var(--muted);font-size:.8rem;padding:.5rem 0">Loading…</div>
+    `;
+    try {
+      const res = await fetch('/api/sessions/' + encodeURIComponent(name) + '/history');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const records = await res.json();
+      _renderHistoryInSheet(name, records, false);
+    } catch (e) {
+      const el = document.getElementById('dsh-hist-body');
+      if (el) el.textContent = 'Failed to load: ' + e.message;
+    }
+  };
+
+  function _renderHistoryInSheet(name, records, expanded) {
+    const el = document.getElementById('dsh-hist-body');
+    if (!el) return;
+    const esc = window.escHtml;
+    if (records.length === 0) { el.textContent = 'No history yet.'; return; }
+    const shown = expanded ? records : records.slice(0, 10);
+    const rows = shown.map(r => `
+      <div class="dsh-hist-row">
+        <div class="dsh-hist-name">
+          <span class="dsh-hist-label">${esc(r.name || r.started_at.slice(0, 10))}</span>
+          <button class="dsh-hist-btn" data-action="rename" data-id="${r.id}" data-name="${esc(r.name || r.started_at.slice(0, 10))}" data-project="${esc(name)}">✎</button>
+        </div>
+        <div class="dsh-hist-meta">${esc(r.started_at.slice(0,10))} ${esc(r.started_at.slice(11,16))} UTC</div>
+        <div class="dsh-hist-actions">
+          <span class="status-badge status-${r.status}" style="font-size:.65rem;padding:.1rem .4rem">${esc(r.status)}</span>
+          ${r.has_snapshot ? `<button class="dsh-hist-btn" data-action="log" data-id="${r.id}" data-label="${esc(r.name || r.started_at.slice(0,10))}" data-project="${esc(name)}">≡ log</button>` : ''}
+          ${r.status !== 'running' ? `<button class="dsh-hist-btn" data-action="resume" data-id="${r.id}" data-project="${esc(name)}">▶ resume</button>` : ''}
+        </div>
+      </div>
+    `).join('');
+    const more = records.length > 10
+      ? `<button class="dsh-hist-more" data-expanded="${expanded}">${expanded ? '▲ show less' : `… ${records.length - 10} more`}</button>`
+      : '';
+    el.innerHTML = rows + more;
+
+    el.querySelectorAll('[data-action="rename"]').forEach(btn => {
+      btn.addEventListener('click', () => window.startRename(btn.dataset.project, +btn.dataset.id, btn.dataset.name));
+    });
+    el.querySelectorAll('[data-action="log"]').forEach(btn => {
+      btn.addEventListener('click', () => window.showSnapshot(btn.dataset.project, +btn.dataset.id, btn.dataset.label));
+    });
+    el.querySelectorAll('[data-action="resume"]').forEach(btn => {
+      btn.addEventListener('click', () => window.continueSession(btn.dataset.project, +btn.dataset.id, btn));
+    });
+    el.querySelectorAll('.dsh-hist-more').forEach(btn => {
+      btn.addEventListener('click', () => _renderHistoryInSheet(name, records, btn.dataset.expanded !== 'true'));
+    });
   }
 
   window.toggleOverflowD = function () {

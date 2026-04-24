@@ -2260,7 +2260,8 @@
     if (!container) return;
     const open = container.classList.toggle('open');
     const count = (historyCache[name] || []).length;
-    toggle.textContent = (open ? '▾' : '▸') + ` History (${count})`;
+    if (toggle) toggle.textContent = (open ? '▾' : '▸') + ` History (${count})`;
+    if (open) container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 
   async function continueSession(projectName, sessionId, btn) {
