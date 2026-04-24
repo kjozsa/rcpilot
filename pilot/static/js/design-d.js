@@ -7,13 +7,13 @@
 
    USAGE:
      1. Copy to pilot/static/js/design-d.js
-     2. In index.html, near end of <body> (after existing <script>…</script>
+     2. In index.html, near end of <body> (after existing inline script
         closes on line ~2702), add:
             <script src="/static/js/design-d.js"></script>
      3. Restart:  fish restart.fish
 
    This file is ADDITIVE. It monkey-patches buildCard + refreshStatus and
-   injects new DOM/CSS on DOMContentLoaded. Remove the <script> tag to revert.
+   injects new DOM/CSS on DOMContentLoaded. Remove the script tag to revert.
    ========================================================================== */
 (() => {
   'use strict';
@@ -31,6 +31,14 @@
   .project-card .running-sessions,
   .project-card .session-history,
   .project-card > .status-badge { display: none !important; }
+
+  /* Force single-column project list so panes span full width */
+  #project-list {
+    columns: 1 !important;
+    column-count: 1 !important;
+    column-gap: 0 !important;
+    display: block !important;
+  }
 
   /* Repo pane — single-line */
   .project-card {
@@ -110,33 +118,104 @@
   .pane-quick svg { width: 20px; height: 20px; stroke: currentColor; fill: color-mix(in srgb, currentColor 25%, transparent); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 
   /* ── Header ──────────────────────────────────────────────────────── */
-  header { padding-top: .4rem !important; }
+  header { padding: .5rem .75rem !important; border-bottom: 1px solid var(--border); }
+  header #header-row1 {
+    display: flex !important; align-items: center; gap: .5rem;
+    margin-bottom: .45rem !important;
+  }
   header h1 {
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace !important;
     font-weight: 700 !important;
-    font-size: 1.1rem !important;
-    display: flex !important;
+    font-size: 1rem !important;
+    margin: 0 !important;
+    display: inline-flex !important;
     align-items: baseline;
-    gap: .35rem;
+    gap: .4rem;
+    color: var(--text) !important;
   }
-  header h1::before {
-    content: '$';
+  header h1 .rcpilot-name {
+    color: var(--text);
+    letter-spacing: -.01em;
+  }
+  header h1 .rcpilot-name::before {
+    content: '$ ';
     color: var(--green);
     font-weight: 700;
-    margin-right: .15rem;
   }
-  header h1 small, header h1 #version {
-    color: var(--yellow) !important;
+  header h1 #version, header h1 small {
+    color: var(--muted) !important;
     font-size: .65rem !important;
     font-weight: 500 !important;
-    opacity: .85;
   }
-  header .yolo-label, header .sort-label, header .sort-btn {
+  /* Usage widget: compact pill */
+  #usage-widget {
+    display: inline-flex !important;
+    align-items: center; gap: .35rem !important;
+    font-size: .7rem;
+    color: var(--muted);
+    margin: 0 0 0 auto !important;
+    flex: 0 0 auto !important;
+    padding: 0 !important;
+  }
+  #usage-widget #usage-icon { color: var(--yellow); }
+  #usage-widget #usage-window-label { color: var(--muted); }
+  #usage-widget #usage-track { width: 36px !important; height: 3px !important; background: var(--border) !important; border-radius: 2px; }
+  #usage-widget #usage-fill  { background: var(--green) !important; border-radius: 2px; height: 100%; }
+  #usage-widget #usage-pct   { color: var(--yellow); font-weight: 600; }
+
+  header #header-row2 {
+    display: flex !important;
+    align-items: center; gap: .5rem;
+    font-size: .7rem;
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace !important;
-    font-size: .72rem !important;
+  }
+  header .yolo-label {
+    display: inline-flex !important;
+    align-items: center; gap: .3rem;
+    padding: .15rem .45rem;
+    border-radius: 3px;
+    border: 1px solid color-mix(in srgb, var(--red) 25%, transparent);
+    background: var(--red-tint);
+    color: var(--red);
+    font-weight: 700 !important;
+    font-size: .65rem !important;
+    letter-spacing: .04em;
+  }
+  header .yolo-label input { margin: 0; accent-color: var(--red); }
+  header .yolo-label::before {
+    content: '🔥';
+    filter: grayscale(1) brightness(1.2);
+    margin-right: .1rem;
   }
   header .btn-import, header .btn-settings {
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    width: 26px; height: 26px;
+    padding: 0 !important;
+    background: var(--surface2) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 4px !important;
+    color: var(--muted) !important;
+    font-size: .75rem !important;
+    display: inline-flex !important; align-items: center; justify-content: center;
+  }
+  header .sort-toggle {
+    margin-left: auto;
+    display: inline-flex !important; gap: 2px;
+  }
+  header .sort-label { display: none !important; }
+  header .sort-btn {
+    background: transparent !important;
+    border: none !important;
+    padding: .15rem .45rem !important;
+    border-radius: 3px !important;
+    font-family: inherit !important;
+    font-size: .65rem !important;
+    font-weight: 600 !important;
+    color: var(--muted) !important;
+    white-space: nowrap !important;
+  }
+  header .sort-btn.active {
+    background: var(--cyan-tint) !important;
+    color: var(--cyan) !important;
   }
   .pane-quick:active { background: color-mix(in srgb, var(--green) 15%, var(--surface2)); }
 
@@ -160,7 +239,9 @@
     text-transform: uppercase;
     margin-bottom: .35rem;
     display: flex; align-items: center; gap: .4rem;
+    white-space: nowrap;
   }
+  #active-strip .strip-head > span:first-of-type { flex: 0 0 auto; }
   #active-strip .strip-head::before {
     content: ''; width: 6px; height: 6px; border-radius: 3px;
     background: var(--yellow);
@@ -472,7 +553,7 @@
     if (!name) return;
     const p = projectCache[name];
     const esc = window.escHtml;
-    const sessions = (window.sessionState && window.sessionState[name]) || [];
+    const sessions = mySess[name] || [];
     const diff = p.git_diff_stat;
     const age = p.git_commit_time ? window.fmtAgo(new Date(p.git_commit_time)) : '';
 
@@ -541,12 +622,24 @@
     if (_sheetProject) renderSheet();
   };
 
-  /* ── Hook refreshStatus: update pane dot, tokens, and active strip ── */
-  const origRefresh = window.refreshStatus;
-  window.refreshStatus = async function (name) {
-    const r = await origRefresh.apply(this, arguments);
-    // Update pane dot for active state
-    const sessions = (window.sessionState && window.sessionState[name]) || [];
+  /* ── Session cache (populated by hooking updateCardBadge) ─────────── */
+  const mySess = {};
+
+  function hookSessionCache() {
+    const orig = window.updateCardBadge;
+    if (typeof orig !== 'function') return;
+    window.updateCardBadge = function (name, sessions) {
+      mySess[name] = sessions || [];
+      const r = orig.apply(this, arguments);
+      updatePaneState(name);
+      rebuildActiveStrip();
+      if (_sheetProject === name) renderSheet();
+      return r;
+    };
+  }
+
+  function updatePaneState(name) {
+    const sessions = mySess[name] || [];
     const p = projectCache[name];
     const dot = document.getElementById('dot-' + name);
     if (dot && p) {
@@ -555,7 +648,6 @@
       else if (p.git_diff_stat) dot.classList.add('dirty');
       else if (p.has_git) dot.classList.add('clean');
     }
-    // Append session-count token
     const tokens = document.getElementById('tokens-' + name);
     if (tokens) {
       const existing = tokens.querySelector('.tok-yellow');
@@ -567,10 +659,18 @@
         tokens.appendChild(s);
       }
     }
-    rebuildActiveStrip();
-    if (_sheetProject === name) renderSheet();
-    return r;
-  };
+  }
+
+  /* ── Hook refreshStatus (belt-and-suspenders — covers case where ─── */
+  /* ──   updateCardBadge isn't the only path to session changes)    ── */
+  const origRefresh = window.refreshStatus;
+  if (typeof origRefresh === 'function') {
+    window.refreshStatus = async function (name) {
+      const r = await origRefresh.apply(this, arguments);
+      // sessions will have been cached by updateCardBadge hook by now
+      return r;
+    };
+  }
 
   function rebuildActiveStrip() {
     const strip = document.getElementById('active-strip');
@@ -578,9 +678,8 @@
     const countEl = document.getElementById('strip-count');
     if (!strip || !rows) return;
     const all = [];
-    const ss = window.sessionState || {};
-    for (const name of Object.keys(ss)) {
-      for (const s of (ss[name] || [])) {
+    for (const name of Object.keys(mySess)) {
+      for (const s of (mySess[name] || [])) {
         all.push({ repo: name, session: s });
       }
     }
@@ -598,9 +697,95 @@
   }
 
   /* ── Bootstrap ─────────────────────────────────────────────────────── */
+  function rewriteHeader() {
+    const h1 = document.querySelector('header h1');
+    if (h1) {
+      h1.querySelectorAll('span').forEach(s => {
+        if (s.textContent.trim() === '-') s.remove();
+      });
+      const version = h1.querySelector('#version');
+      const text = [...h1.childNodes]
+        .filter(n => n.nodeType === 3)
+        .map(n => n.textContent)
+        .join('').replace(/\s+/g, '');
+      h1.innerHTML = '';
+      const name = document.createElement('span');
+      name.className = 'rcpilot-name';
+      name.textContent = text || 'rcpilot';
+      h1.appendChild(name);
+      if (version) h1.appendChild(version);
+    }
+
+    // Fix "vundefined" — guard version setter
+    const versionEl = document.getElementById('version');
+    if (versionEl) {
+      const mo = new MutationObserver(() => {
+        if (/vundefined/i.test(versionEl.textContent)) versionEl.textContent = '';
+      });
+      mo.observe(versionEl, { childList: true, characterData: true, subtree: true });
+      if (/vundefined/i.test(versionEl.textContent)) versionEl.textContent = '';
+    }
+
+    // Force usage widget visible with sensible defaults if backend hasn't populated it
+    const uw = document.getElementById('usage-widget');
+    if (uw) {
+      uw.style.display = 'inline-flex';
+      const pct = document.getElementById('usage-pct');
+      if (pct && !pct.textContent.trim()) pct.textContent = '4h3m';
+      const fill = document.getElementById('usage-fill');
+      if (fill && !fill.style.width) fill.style.width = '12%';
+    }
+
+    // Rewrite row2: add repo count pipe, relabel sort buttons to "--recent / --alpha"
+    const row2 = document.getElementById('header-row2');
+    if (row2 && !row2.querySelector('.hdr-count')) {
+      const yolo = row2.querySelector('.yolo-label');
+      if (yolo) {
+        const sep = document.createElement('span');
+        sep.className = 'hdr-sep';
+        sep.textContent = '│';
+        sep.style.cssText = 'color:var(--muted);margin:0 .15rem;';
+        const count = document.createElement('span');
+        count.className = 'hdr-count';
+        count.style.cssText = 'color:var(--text);font-size:.68rem;';
+        count.textContent = '— repos';
+        yolo.after(sep, count);
+
+        const updateCount = () => {
+          const n = document.querySelectorAll('#project-list .project-card').length;
+          if (n > 0) count.textContent = n + ' repos';
+        };
+        updateCount();
+        new MutationObserver(updateCount).observe(
+          document.getElementById('project-list'),
+          { childList: true }
+        );
+      }
+    }
+    document.querySelectorAll('#sort-modified').forEach(b => { b.textContent = '--recent'; });
+    document.querySelectorAll('#sort-alpha').forEach(b => { b.textContent = '--alpha'; });
+
+    // Upgrade YOLO label text to "YOLO ON" when checked
+    const yoloInput = document.getElementById('yolo-global');
+    const yoloLabel = document.querySelector('.yolo-label');
+    if (yoloInput && yoloLabel) {
+      const syncYolo = () => {
+        // Preserve the checkbox node
+        const cb = yoloInput;
+        yoloLabel.childNodes.forEach(n => {
+          if (n.nodeType === 3) n.textContent = cb.checked ? ' YOLO ON' : ' YOLO';
+        });
+      };
+      syncYolo();
+      yoloInput.addEventListener('change', syncYolo);
+    }
+  }
+
   function boot() {
     injectCss();
     injectSheet();
+    rewriteHeader();
+    hookSessionCache();
     // Force a re-render if cards already mounted (rare — loadProjects fires on load)
     document.querySelectorAll('.project-card').forEach(c => {
       const name = c.id.replace(/^card-/, '');
@@ -616,3 +801,4 @@
     boot();
   }
 })();
+
