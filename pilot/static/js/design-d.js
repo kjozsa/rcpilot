@@ -24,10 +24,13 @@
   .project-card .action-row,
   .project-card .git-actions,
   .project-card .history-header,
+  .project-card .history-toggle,
+  .project-card .btn-clear-history,
   .project-card .git-diff-stat,
   .project-card .git-synced,
   .project-card .running-sessions,
-  .project-card .session-history { display: none !important; }
+  .project-card .session-history,
+  .project-card > .status-badge { display: none !important; }
 
   /* Repo pane — single-line */
   .project-card {
@@ -42,40 +45,41 @@
     flex: 1 1 auto;
     min-width: 0;
     display: flex !important;
-    align-items: center;
-    gap: .5rem;
-    padding: .65rem .85rem;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: .22rem !important;
+    padding: .55rem .8rem !important;
+    margin: 0 !important;
     cursor: pointer;
-    flex-wrap: nowrap !important;
   }
   .project-card .project-header:active { background: color-mix(in srgb, var(--text) 4%, transparent); }
+  .pane-row1 { display: flex; align-items: center; gap: .5rem; min-width: 0; }
+  .pane-row2 { display: flex; align-items: center; gap: .45rem; min-width: 0; font-size: .68rem; color: var(--muted); padding-left: 16px; flex-wrap: wrap; }
   .project-card .project-name {
     flex: 1 1 auto;
     min-width: 0;
-    display: flex !important;
-    align-items: center;
-    gap: .4rem;
+    display: block !important;
     font-weight: 600;
-    font-size: .85rem;
+    font-size: .95rem;
+    color: var(--text);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    padding: 0 !important;
+    margin: 0 !important;
   }
-  .project-card .project-name > :first-child {
-    color: var(--text);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    flex-shrink: 1;
-  }
-  .project-card .git-badge {
-    font-size: .68rem;
-    padding: .05rem .4rem;
+  .pane-row2 .git-badge {
+    background: var(--purple-tint);
+    color: var(--purple);
+    font-size: .64rem;
+    padding: 0 .38rem;
+    border-radius: 4px;
+    font-family: inherit;
     flex-shrink: 0;
   }
-  .project-card .git-hash {
-    font-size: .66rem;
-    flex-shrink: 0;
-  }
+  .pane-row2 .pane-sha { flex-shrink: 0; }
+  .pane-row2 .pane-age { opacity: .75; flex-shrink: 0; }
+  .pane-row2 .pane-tok { margin-left: auto; display: inline-flex; gap: .4rem; flex-shrink: 0; }
 
   .pane-dot {
     width: 8px; height: 8px; border-radius: 4px;
@@ -86,31 +90,53 @@
   .pane-dot.dirty  { background: var(--orange); }
   .pane-dot.clean  { background: var(--green); }
 
-  .pane-tokens {
-    display: flex;
-    gap: .45rem;
-    font-size: .7rem;
-    color: var(--muted);
-    margin-left: auto;
-    flex-shrink: 0;
-    align-items: center;
-  }
-  .pane-tokens .tok-orange { color: var(--orange); }
-  .pane-tokens .tok-green  { color: var(--green); }
-  .pane-tokens .tok-yellow { color: var(--yellow); }
+  .pane-row2 .tok-orange { color: var(--orange); }
+  .pane-row2 .tok-green  { color: var(--green); }
+  .pane-row2 .tok-yellow { color: var(--yellow); }
 
   .pane-quick {
     flex-shrink: 0;
-    width: 44px;
+    width: 54px;
     border: none;
     border-left: 1px solid var(--border);
     background: var(--surface2);
     color: var(--green);
-    font-size: 1rem;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
+    padding: 0;
+  }
+  .pane-quick svg { width: 20px; height: 20px; stroke: currentColor; fill: color-mix(in srgb, currentColor 25%, transparent); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* ── Header ──────────────────────────────────────────────────────── */
+  header { padding-top: .4rem !important; }
+  header h1 {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace !important;
+    font-weight: 700 !important;
+    font-size: 1.1rem !important;
+    display: flex !important;
+    align-items: baseline;
+    gap: .35rem;
+  }
+  header h1::before {
+    content: '$';
+    color: var(--green);
+    font-weight: 700;
+    margin-right: .15rem;
+  }
+  header h1 small, header h1 #version {
+    color: var(--yellow) !important;
+    font-size: .65rem !important;
+    font-weight: 500 !important;
+    opacity: .85;
+  }
+  header .yolo-label, header .sort-label, header .sort-btn {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace !important;
+    font-size: .72rem !important;
+  }
+  header .btn-import, header .btn-settings {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   }
   .pane-quick:active { background: color-mix(in srgb, var(--green) 15%, var(--surface2)); }
 
@@ -351,22 +377,27 @@
   /* ── Repo pane markup ─────────────────────────────────────────────── */
   function paneMarkup(project) {
     const esc = window.escHtml;
-    const ageAttr = project.git_commit_time ? ' · ' + window.fmtAgo(new Date(project.git_commit_time)) : '';
+    const age = project.git_commit_time ? window.fmtAgo(new Date(project.git_commit_time)) : '';
     const diffStat = project.git_diff_stat ? project.git_diff_stat : '';
     const state = project.git_diff_stat ? 'dirty' : (project.has_git ? 'clean' : 'idle');
+    const BOLT = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 L4 14 L11 14 L10 22 L20 10 L13 10 Z"/></svg>';
+    const row2Has = project.git_branch || project.git_hash || diffStat;
     return `
       <div class="project-header" onclick="openSheetD('${encodeURIComponent(project.name)}')">
-        <span class="pane-dot ${state}" id="dot-${project.name}"></span>
-        <div class="project-name">
-          <span>${esc(project.name)}</span>
+        <div class="pane-row1">
+          <span class="pane-dot ${state}" id="dot-${project.name}"></span>
+          <div class="project-name">${esc(project.name)}</div>
+        </div>
+        ${row2Has ? `<div class="pane-row2">
           ${project.git_branch ? `<span class="git-badge">${esc(project.git_branch)}</span>` : (project.has_git ? '<span class="git-badge">git</span>' : '')}
-          ${project.git_hash ? `<span class="git-hash">${esc(project.git_hash)}${ageAttr}</span>` : ''}
-        </div>
-        <div class="pane-tokens" id="tokens-${project.name}">
-          ${diffStat ? `<span class="tok-orange">${esc(diffStat.split(' ')[0])}</span>` : ''}
-        </div>
+          ${project.git_hash ? `<span class="pane-sha">${esc(project.git_hash)}</span>` : ''}
+          ${age ? `<span class="pane-age">${esc(age)}</span>` : ''}
+          <span class="pane-tok" id="tokens-${project.name}">
+            ${diffStat ? `<span class="tok-orange">~${esc(diffStat.split(' ')[0])}</span>` : ''}
+          </span>
+        </div>` : ''}
       </div>
-      <button class="pane-quick" title="New session" onclick="event.stopPropagation(); openNewSession('${project.name}')">⚡</button>
+      <button class="pane-quick" title="New session" onclick="event.stopPropagation(); openNewSession('${project.name}')">${BOLT}</button>
       <!-- keep these for legacy handlers; CSS hides them -->
       <span class="status-badge" id="badge-${project.name}">…</span>
       <div class="running-sessions" id="running-${project.name}"></div>
