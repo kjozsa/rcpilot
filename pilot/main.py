@@ -529,6 +529,7 @@ def start_session(
     yolo: bool = Body(False, embed=True),
 ) -> dict:
     path = _get_project_path(project)
+    _accept_claude_trust(Path(path))
     ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     db_name = name if name else ts
     claude_name = f"{project} - {db_name}"

@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cat ~/.claude/projects/-home-kjozsa-rcpilot-projects-rcpilot/*.json)",
+      "Bash(cat ~/.claude/projects/-home-kjozsa-rcpilot-projects-bhdl/*.json)"
+    ]
+  }
+}
