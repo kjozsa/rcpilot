@@ -510,6 +510,24 @@ def import_project(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/api/projects/create")
+def create_project(name: str = Body(..., embed=True)) -> dict:
+    """Create a blank project directory."""
+    import re
+    if not name:
+        raise HTTPException(status_code=422, detail="Project name is required")
+    if not re.match(r'^[a-zA-Z0-9_\-\.]+$', name):
+        raise HTTPException(status_code=422, detail="Invalid project name")
+    target_path = _config.projects_dir / name
+    if target_path.exists():
+        raise HTTPException(status_code=409, detail=f"Project '{name}' already exists")
+    _config.projects_dir.mkdir(parents=True, exist_ok=True)
+    target_path.mkdir()
+    _accept_claude_trust(target_path)
+    logger.info("created blank project {}", name)
+    return {"success": True, "project_name": name}
+
+
 # ---------------------------------------------------------------------------
 # Sessions
 # ---------------------------------------------------------------------------

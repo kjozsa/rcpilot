@@ -256,7 +256,7 @@
   #active-strip .strip-row:first-of-type { border-top: none; }
   #active-strip .strip-name { font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 auto; min-width: 0; }
   #active-strip .strip-repo { color: var(--purple); font-size: .7rem; flex-shrink: 0; }
-  #active-strip .strip-attach, #active-strip .strip-kill {
+  #active-strip .strip-attach, #active-strip .strip-rename, #active-strip .strip-kill {
     background: none; border: 1px solid var(--border);
     border-radius: 6px; padding: .15rem .5rem;
     font-size: .68rem; cursor: pointer;
@@ -264,6 +264,8 @@
   }
   #active-strip .strip-attach { color: var(--green); border-color: color-mix(in srgb, var(--green) 35%, transparent); background: var(--green-tint); }
   #active-strip .strip-kill   { color: var(--red);   border-color: color-mix(in srgb, var(--red) 35%, transparent);   background: var(--red-tint); }
+  #active-strip .strip-rename { color: var(--muted); }
+  #active-strip .strip-rename:hover { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 35%, transparent); }
 
   /* Action sheet */
   #dsheet-overlay {
@@ -333,13 +335,15 @@
   #dsheet .ds-active + .ds-active { margin-top: -.5rem; }
   #dsheet .ds-active .dot { width: 6px; height: 6px; border-radius: 3px; background: var(--yellow); flex-shrink: 0; box-shadow: 0 0 0 3px color-mix(in srgb, var(--yellow) 25%, transparent); }
   #dsheet .ds-active .lbl { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  #dsheet .ds-active .go, #dsheet .ds-active .kill {
+  #dsheet .ds-active .go, #dsheet .ds-active .rename, #dsheet .ds-active .kill {
     text-decoration: none; font-size: .7rem;
     padding: .2rem .55rem; border-radius: 6px; border: 1px solid var(--border); cursor: pointer;
     background: none;
   }
-  #dsheet .ds-active .go   { color: var(--green); border-color: color-mix(in srgb, var(--green) 35%, transparent); background: var(--green-tint); }
-  #dsheet .ds-active .kill { color: var(--red);   border-color: color-mix(in srgb, var(--red) 35%, transparent);   background: var(--red-tint); }
+  #dsheet .ds-active .go     { color: var(--green); border-color: color-mix(in srgb, var(--green) 35%, transparent); background: var(--green-tint); }
+  #dsheet .ds-active .kill   { color: var(--red);   border-color: color-mix(in srgb, var(--red) 35%, transparent);   background: var(--red-tint); }
+  #dsheet .ds-active .rename { color: var(--muted); }
+  #dsheet .ds-active .rename:hover { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 35%, transparent); }
 
   #dsheet .ds-primary {
     display: block; width: 100%;
@@ -558,7 +562,7 @@
     const activeRows = sessions.map(s => `
       <div class="ds-active">
         <span class="dot"></span>
-        <span class="lbl">${esc(s.name || 'unnamed')}</span>
+        <span class="lbl">${esc(s.name || 'unnamed')}</span><button class="rename" onclick="startRunningSessionRename('${esc(name)}', ${s.id}, this.previousElementSibling)">✎</button>
         ${s.rc_url ? `<a class="go" href="${esc(s.rc_url)}" target="_blank" rel="noopener">attach ↗</a>` : ''}
         <button class="kill" onclick="killSession('${esc(name)}', ${s.id}).then(()=>renderSheetDRefresh())">kill</button>
       </div>
@@ -687,7 +691,7 @@
     rows.innerHTML = all.map(({ repo, session }) => `
       <div class="strip-row">
         <span class="strip-repo">${esc(repo)}</span>
-        <span class="strip-name">${esc(session.name || 'unnamed')}</span>
+        <span class="strip-name">${esc(session.name || 'unnamed')}</span><button class="strip-rename" onclick="startRunningSessionRename('${esc(repo)}', ${session.id}, this.previousElementSibling)">✎</button>
         ${session.rc_url ? `<a class="strip-attach" href="${esc(session.rc_url)}" target="_blank" rel="noopener">attach ↗</a>` : ''}
         <button class="strip-kill" onclick="killSession('${esc(repo)}', ${session.id})">kill</button>
       </div>

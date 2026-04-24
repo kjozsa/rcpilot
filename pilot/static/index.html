@@ -1205,7 +1205,41 @@
     #import-url:focus { outline: none; border-color: var(--accent); }
     #import-url::placeholder { color: var(--muted); }
 
-    #import-help {
+    #import-tabs {
+      display: flex;
+      gap: .35rem;
+    }
+    .import-tab {
+      flex: 1;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--muted);
+      font-size: .8rem;
+      padding: .4rem .6rem;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .import-tab.active {
+      background: var(--cyan-tint);
+      color: var(--cyan);
+      border-color: color-mix(in srgb, var(--cyan) 35%, transparent);
+    }
+
+    #import-name {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: .6rem .75rem;
+      font-size: .88rem;
+      font-family: ui-monospace, monospace;
+      width: 100%;
+    }
+    #import-name:focus { outline: none; border-color: var(--accent); }
+    #import-name::placeholder { color: var(--muted); }
+
+    #import-help, #import-blank-help {
       font-size: .75rem;
       color: var(--muted);
       line-height: 1.4;
@@ -1426,7 +1460,7 @@
   <div id="header-row2">
     <label class="yolo-label"><input type="checkbox" id="yolo-global" checked> YOLO</label>
     <div style="display:flex;gap:.5rem;align-items:center">
-      <button class="btn-import" onclick="openImport()" title="Import from GitHub"></button>
+      <button class="btn-import" onclick="openImport()" title="Add project"></button>
       <button class="btn-settings" onclick="openSettings()" title="Settings">⚙</button>
       <div class="sort-toggle">
         <span class="sort-label">Sort:</span>
@@ -1552,16 +1586,24 @@
 <div id="import-overlay" onclick="closeImport(event)">
   <div id="import-sheet">
     <div id="import-header">
-      <span id="import-title">Import project from GitHub</span>
+      <span id="import-title">Add project</span>
       <button id="import-close" onclick="closeImport()">✕</button>
     </div>
-    <input type="text" id="import-url" placeholder="https://github.com/user/repo" />
-    <div id="import-help">
-      Enter a GitHub repository URL to clone it into your projects directory. The repository will be cloned and immediately available.
+    <div id="import-tabs">
+      <button class="import-tab active" id="tab-github" onclick="switchImportTab('github')">from GitHub</button>
+      <button class="import-tab" id="tab-blank" onclick="switchImportTab('blank')">blank</button>
+    </div>
+    <div id="import-github-form">
+      <input type="text" id="import-url" placeholder="https://github.com/user/repo" />
+      <div id="import-help">Clone a GitHub repo into your projects directory.</div>
+    </div>
+    <div id="import-blank-form" style="display:none">
+      <input type="text" id="import-name" placeholder="my-project" />
+      <div id="import-blank-help">Creates an empty directory in your projects folder.</div>
     </div>
     <div id="import-footer">
       <button id="import-cancel" onclick="closeImport()">Cancel</button>
-      <button id="import-submit" onclick="submitImport()">Import</button>
+      <button id="import-submit" onclick="submitImportActive()">Import</button>
     </div>
   </div>
 </div>
@@ -2520,8 +2562,27 @@
     if (e.key === 'Escape') { closeLog(); closeDiff(); closeSnapshot(); closeSend(); closePRReview(); closeNewSession(); closeTickerLog(); closeImport(); }
   });
 
+  let _importMode = 'github';
+
+  function switchImportTab(mode) {
+    _importMode = mode;
+    document.getElementById('tab-github').classList.toggle('active', mode === 'github');
+    document.getElementById('tab-blank').classList.toggle('active', mode === 'blank');
+    document.getElementById('import-github-form').style.display = mode === 'github' ? '' : 'none';
+    document.getElementById('import-blank-form').style.display = mode === 'blank' ? '' : 'none';
+    document.getElementById('import-submit').textContent = mode === 'blank' ? 'Create' : 'Import';
+    setTimeout(() => document.getElementById(mode === 'blank' ? 'import-name' : 'import-url').focus(), 50);
+  }
+
   function openImport() {
+    _importMode = 'github';
     document.getElementById('import-url').value = '';
+    document.getElementById('import-name').value = '';
+    document.getElementById('import-github-form').style.display = '';
+    document.getElementById('import-blank-form').style.display = 'none';
+    document.getElementById('tab-github').classList.add('active');
+    document.getElementById('tab-blank').classList.remove('active');
+    document.getElementById('import-submit').textContent = 'Import';
     document.getElementById('import-overlay').classList.add('open');
     document.body.style.overflow = 'hidden';
     setTimeout(() => document.getElementById('import-url').focus(), 100);
@@ -2531,6 +2592,41 @@
     if (e && e.target !== document.getElementById('import-overlay')) return;
     document.getElementById('import-overlay').classList.remove('open');
     document.body.style.overflow = '';
+  }
+
+  function submitImportActive() {
+    if (_importMode === 'blank') submitCreateBlank(); else submitImport();
+  }
+
+  async function submitCreateBlank() {
+    const name = document.getElementById('import-name').value.trim();
+    if (!name) { showError('Please enter a project name'); return; }
+    if (!/^[a-zA-Z0-9_\-\.]+$/.test(name)) {
+      showError('Name can only contain letters, numbers, dashes, underscores, and dots');
+      return;
+    }
+    const btn = document.getElementById('import-submit');
+    const orig = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Creating…';
+    showError(null);
+    try {
+      const res = await fetch('/api/projects/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `HTTP ${res.status}`);
+      }
+      closeImport();
+      await loadProjects();
+    } catch (err) {
+      showError('Create failed: ' + err.message);
+      btn.disabled = false;
+      btn.textContent = orig;
+    }
   }
 
   async function submitImport() {
