@@ -784,6 +784,7 @@
         all.push({ repo: name, session: s });
       }
     }
+    all.sort((a, b) => (b.session.started_at || '').localeCompare(a.session.started_at || ''));
     countEl.textContent = all.length;
     strip.classList.toggle('has-any', all.length > 0);
     const esc = window.escHtml;
