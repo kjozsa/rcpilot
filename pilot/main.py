@@ -18,13 +18,16 @@ Routes (all sync — FastAPI runs them in a thread pool):
 from __future__ import annotations
 
 import datetime
+import hashlib
+import hmac
+import secrets
 import subprocess
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 import uvicorn
 from fastapi import Body, FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from loguru import logger
 
@@ -50,6 +53,9 @@ from pilot.updater import start_updater, get_updater_state, force_update
 
 _config: Config = load_config()
 _STATIC_DIR = Path(__file__).parent / "static"
+
+_SESSION_SECRET = secrets.token_bytes(32)
+_SESSION_TOKEN = hmac.new(_SESSION_SECRET, b"rcpilot_authenticated", hashlib.sha256).hexdigest()
 _CLAUDE_SETTINGS = Path.home() / ".claude" / "settings.json"
 _CODE_REVIEW_PLUGIN = "code-review@claude-plugins-official"
 
@@ -108,6 +114,60 @@ async def lifespan(app: FastAPI):  # type: ignore[type-arg]
 app = FastAPI(title="rcpilot", version=_read_version(), lifespan=lifespan)
 
 app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
+
+
+# ---------------------------------------------------------------------------
+# Auth middleware + endpoints
+# ---------------------------------------------------------------------------
+
+@app.middleware("http")
+async def _auth_middleware(request: Request, call_next):
+    if not _config.admin_keyphrase:
+        return await call_next(request)
+    path = request.url.path
+    if not path.startswith("/api/") or path.startswith("/api/auth/"):
+        return await call_next(request)
+    cookie = request.cookies.get("rcpilot_session", "")
+    if secrets.compare_digest(cookie.encode(), _SESSION_TOKEN.encode()):
+        return await call_next(request)
+    return JSONResponse({"detail": "Unauthorized"}, status_code=401)
+
+
+@app.get("/api/auth/status")
+def auth_status(request: Request) -> dict:
+    enabled = bool(_config.admin_keyphrase)
+    if not enabled:
+        return {"enabled": False, "authenticated": True}
+    cookie = request.cookies.get("rcpilot_session", "")
+    authenticated = secrets.compare_digest(cookie.encode(), _SESSION_TOKEN.encode())
+    return {"enabled": enabled, "authenticated": authenticated}
+
+
+@app.post("/api/auth/login")
+def auth_login(request: Request, body: dict = Body(...)) -> JSONResponse:
+    if not _config.admin_keyphrase:
+        return JSONResponse({"authenticated": True})
+    keyphrase = str(body.get("keyphrase", ""))
+    if not secrets.compare_digest(keyphrase.encode(), _config.admin_keyphrase.encode()):
+        raise HTTPException(status_code=401, detail="Invalid keyphrase")
+    response = JSONResponse({"authenticated": True})
+    secure = bool(_config.ssl_certfile and _config.ssl_keyfile)
+    response.set_cookie(
+        "rcpilot_session",
+        _SESSION_TOKEN,
+        httponly=True,
+        samesite="strict",
+        secure=secure,
+        max_age=7 * 24 * 3600,
+    )
+    return response
+
+
+@app.post("/api/auth/logout")
+def auth_logout() -> JSONResponse:
+    response = JSONResponse({"authenticated": False})
+    response.delete_cookie("rcpilot_session", httponly=True, samesite="strict")
+    return response
 
 
 # ---------------------------------------------------------------------------
@@ -671,11 +731,17 @@ def run() -> None:
     logger.add(log_file, rotation="10 MB", retention=3, level="DEBUG")
     logger.info("starting rcpilot on {}:{}", _config.host, _config.port)
     logger.info("projects_dir={} db={} log={}", _config.projects_dir, _config.db_path, log_file)
+    tls = bool(_config.ssl_certfile and _config.ssl_keyfile)
+    if tls:
+        logger.info("TLS enabled: cert={} key={}", _config.ssl_certfile, _config.ssl_keyfile)
+    if _config.admin_keyphrase:
+        logger.info("admin keyphrase auth enabled")
     uvicorn.run(
         "pilot.main:app",
         host=_config.host,
         port=_config.port,
         reload=False,
+        **({"ssl_certfile": _config.ssl_certfile, "ssl_keyfile": _config.ssl_keyfile} if tls else {}),
     )
 
 

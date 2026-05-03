@@ -1440,10 +1440,72 @@
       line-height: 1.5;
     }
   }
+
+    /* ── Login overlay ───────────────────────────────────────────────── */
+    #login-overlay {
+      position: fixed;
+      inset: 0;
+      background: var(--bg);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+    }
+    .login-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 2rem;
+      width: 100%;
+      max-width: 360px;
+      display: flex;
+      flex-direction: column;
+      gap: 1.2rem;
+      text-align: center;
+    }
+    .login-card h2 { font-size: 1.5rem; }
+    .login-card h2 span { color: var(--accent); }
+    #login-form { display: flex; flex-direction: column; gap: .8rem; }
+    #login-keyphrase {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      padding: .65rem .9rem;
+      font-size: 1rem;
+      width: 100%;
+      outline: none;
+    }
+    #login-keyphrase:focus { border-color: var(--accent); }
+    #login-submit {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius);
+      padding: .65rem;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity .15s;
+    }
+    #login-submit:hover { opacity: .85; }
+    #login-submit:disabled { opacity: .5; cursor: default; }
+    .login-error { color: var(--red); font-size: .85rem; min-height: 1.2em; }
   </style>
   <link rel="stylesheet" href="/static/css/theme-patch.css" />
 </head>
 <body>
+
+<div id="login-overlay">
+  <div class="login-card">
+    <h2>rc<span>pilot</span></h2>
+    <form id="login-form">
+      <input type="password" id="login-keyphrase" placeholder="Admin keyphrase" autocomplete="current-password" />
+      <button type="submit" id="login-submit">Unlock</button>
+    </form>
+    <p class="login-error" id="login-error"></p>
+  </div>
+</div>
 
 <header>
   <div id="header-row1">
@@ -1653,8 +1715,75 @@
   const historyCache = {};   // project name → array of session records
   let currentSortOrder = localStorage.getItem('projectSortOrder') || 'modified';
 
+  // ── Auth ───────────────────────────────────────────────────────────────
+  const _origFetch = window.fetch.bind(window);
+  window.fetch = async function(...args) {
+    const res = await _origFetch(...args);
+    const url = (args[0] || '').toString();
+    if (res.status === 401 && !url.includes('/api/auth/')) {
+      _showLoginOverlay();
+    }
+    return res;
+  };
+
+  async function _checkAuth() {
+    try {
+      const res = await _origFetch('/api/auth/status');
+      const data = await res.json();
+      return data.authenticated;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  function _showLoginOverlay() {
+    const ol = document.getElementById('login-overlay');
+    ol.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    setTimeout(() => document.getElementById('login-keyphrase').focus(), 50);
+  }
+
+  function _hideLoginOverlay() {
+    document.getElementById('login-overlay').style.display = 'none';
+    document.body.style.overflow = '';
+  }
+
+  async function _submitLogin(e) {
+    e.preventDefault();
+    const btn = document.getElementById('login-submit');
+    const errEl = document.getElementById('login-error');
+    const keyphrase = document.getElementById('login-keyphrase').value;
+    btn.disabled = true;
+    errEl.textContent = '';
+    try {
+      const res = await _origFetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keyphrase }),
+      });
+      if (!res.ok) {
+        errEl.textContent = 'Invalid keyphrase';
+        document.getElementById('login-keyphrase').select();
+        btn.disabled = false;
+        return;
+      }
+      _hideLoginOverlay();
+      _initApp();
+    } catch (err) {
+      errEl.textContent = 'Error: ' + err.message;
+      btn.disabled = false;
+    }
+  }
+
   // ── Bootstrap ──────────────────────────────────────────────────────────
-  document.addEventListener('DOMContentLoaded', () => {
+  document.addEventListener('DOMContentLoaded', async () => {
+    document.getElementById('login-form').addEventListener('submit', _submitLogin);
+    const authed = await _checkAuth();
+    if (!authed) { _showLoginOverlay(); return; }
+    _initApp();
+  });
+
+  function _initApp() {
     updateSortButtons();
     loadProjects();
     fetch('/api/info').then(r => r.json()).then(d => {
@@ -1687,7 +1816,7 @@
         if (!ok) e.target.checked = false;
       }
     });
-  });
+  }
 
   function setSortOrder(order) {
     currentSortOrder = order;

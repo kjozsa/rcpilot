@@ -42,7 +42,7 @@ curl -o ~/.config/systemd/user/rcpilot.service \
 systemctl --user enable --now rcpilot
 ```
 
-Open **http://localhost:8000** (or your Pi's IP/Tailscale hostname on port 8000).
+Open **http://localhost:8000** (or your Pi's IP/Tailscale hostname on the configured port).
 
 ---
 
@@ -75,10 +75,49 @@ Supported cron syntax: `*`, `*/n`, `a-b`, `a,b,c` (5-field, local time).
 
 ---
 
-## Security note
+## Security
 
-No authentication. Run on a trusted private network only (Tailscale, WireGuard, or local LAN).
-**Do not expose port 8000 to the public internet.**
+By default rcpilot has **no authentication** — designed for a private trusted network. If visitors use your local network, enable a keyphrase and HTTPS.
+
+### Keyphrase auth
+
+Add to `~/.config/rcpilot/config.toml` and restart:
+
+```toml
+admin_keyphrase = "your-secret-here"
+```
+
+The UI shows a login screen. Sessions last 7 days per browser.
+
+### HTTPS with mkcert
+
+Without HTTPS the keyphrase is visible in plaintext on the network. [mkcert](https://github.com/FiloSottile/mkcert) creates a locally-trusted certificate with no browser warnings.
+
+```bash
+# Install mkcert
+sudo apt install mkcert        # Debian/Raspberry Pi OS
+# brew install mkcert          # macOS
+
+# Create local CA (once — also run on each browser/device that needs to trust it)
+mkcert -install
+
+# Generate certificate
+mkdir -p ~/.config/rcpilot/tls
+mkcert -key-file ~/.config/rcpilot/tls/key.pem \
+       -cert-file ~/.config/rcpilot/tls/cert.pem \
+       localhost raspberrypi.local 192.168.1.x
+```
+
+Add to config and restart:
+
+```toml
+ssl_certfile = "~/.config/rcpilot/tls/cert.pem"
+ssl_keyfile  = "~/.config/rcpilot/tls/key.pem"
+```
+
+Then open **https://** instead of http://. For mobile devices, copy `~/.local/share/mkcert/rootCA.pem` from the Pi to the device and install it as a trusted certificate.
+
+**Do not expose rcpilot to the public internet.**
 
 ---
 

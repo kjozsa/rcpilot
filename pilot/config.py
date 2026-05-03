@@ -30,6 +30,21 @@ db_path = "~/.config/rcpilot/pilot.db"
 # start the 5-hour rolling usage window (Pro/Max plans). Standard 5-field cron.
 # Example: window_cron = "0 7,12,17 * * *"   # fire at 07:00, 12:00, and 17:00 daily
 window_cron = "0 7,12,17 * * *"
+
+# ── Security (optional) ────────────────────────────────────────────────────
+# Protect the UI with a keyphrase. Without this, anyone on your network can
+# access rcpilot. Recommended if visitors use your local network.
+# admin_keyphrase = "your-secret-here"
+
+# Enable HTTPS. Without TLS the keyphrase is visible on the network in plain
+# text, so set both together. Generate a trusted local cert with mkcert:
+#   mkcert -install   # once per machine/browser
+#   mkdir -p ~/.config/rcpilot/tls
+#   mkcert -key-file ~/.config/rcpilot/tls/key.pem \\
+#          -cert-file ~/.config/rcpilot/tls/cert.pem \\
+#          localhost <hostname> <ip>
+# ssl_certfile = "~/.config/rcpilot/tls/cert.pem"
+# ssl_keyfile  = "~/.config/rcpilot/tls/key.pem"
 """
 
 
@@ -49,6 +64,11 @@ class Config:
     window_cron: str = ""
     # Cron expression for claude auto-update (default: 06:00 and 18:00 daily)
     claude_update_cron: str = "0 6,18 * * *"
+    # Optional admin keyphrase — if set, UI requires login
+    admin_keyphrase: str = ""
+    # Optional TLS certificate and key paths for HTTPS
+    ssl_certfile: str = ""
+    ssl_keyfile: str = ""
 
 
 def _prompt_first_run() -> tuple[str, int]:
@@ -101,5 +121,11 @@ def load_config(path: Path | None = None) -> Config:
         kwargs["window_cron"] = str(raw["window_cron"]).strip()
     if "claude_update_cron" in raw:
         kwargs["claude_update_cron"] = str(raw["claude_update_cron"]).strip()
+    if "admin_keyphrase" in raw:
+        kwargs["admin_keyphrase"] = str(raw["admin_keyphrase"]).strip()
+    if "ssl_certfile" in raw:
+        kwargs["ssl_certfile"] = str(Path(raw["ssl_certfile"]).expanduser())
+    if "ssl_keyfile" in raw:
+        kwargs["ssl_keyfile"] = str(Path(raw["ssl_keyfile"]).expanduser())
 
     return Config(**kwargs)
