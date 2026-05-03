@@ -152,6 +152,7 @@ def list_running_sessions(project: str, db_path: str) -> list[dict[str, Any]]:
                 "rc_url": record["rc_url"],
                 "status": "running",
                 "imported": is_imported,
+                "started_at": record.get("started_at") or "",
             })
         else:
             logger.debug("stale running record {} — pid {} gone, marking stopped", record["id"], pid)
