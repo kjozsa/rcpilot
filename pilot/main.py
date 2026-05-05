@@ -22,6 +22,7 @@ import hashlib
 import hmac
 import secrets
 import subprocess
+import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -115,6 +116,15 @@ app = FastAPI(title="rcpilot", version=_read_version(), lifespan=lifespan)
 
 app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 
+# Minimal app for the HTTP proxy-only server (no lifespan, no auth, localhost only).
+# Used when TLS is enabled so ANTHROPIC_BASE_URL stays plain HTTP.
+_proxy_app = FastAPI()
+
+
+@_proxy_app.api_route("/proxy/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"])
+async def _proxy_app_handler(request: Request, path: str) -> StreamingResponse:
+    return await pilot_proxy.handle(request, path)
+
 
 # ---------------------------------------------------------------------------
 # Auth middleware + endpoints
@@ -194,8 +204,17 @@ def get_info() -> dict:
     }
 
 
+def _resolved_proxy_port() -> int:
+    """HTTP-only proxy port — used when TLS is active so ANTHROPIC_BASE_URL stays plain HTTP."""
+    if _config.proxy_port:
+        return _config.proxy_port
+    return _config.port + 1
+
+
 def _proxy_url() -> str:
-    return f"http://127.0.0.1:{_config.port}/proxy"
+    tls = bool(_config.ssl_certfile and _config.ssl_keyfile)
+    port = _resolved_proxy_port() if tls else _config.port
+    return f"http://127.0.0.1:{port}/proxy"
 
 
 def _subprocess_env() -> dict:
@@ -733,7 +752,14 @@ def run() -> None:
     logger.info("projects_dir={} db={} log={}", _config.projects_dir, _config.db_path, log_file)
     tls = bool(_config.ssl_certfile and _config.ssl_keyfile)
     if tls:
+        proxy_port = _resolved_proxy_port()
         logger.info("TLS enabled: cert={} key={}", _config.ssl_certfile, _config.ssl_keyfile)
+        logger.info("HTTP proxy server for ANTHROPIC_BASE_URL on 127.0.0.1:{}", proxy_port)
+        t = threading.Thread(
+            target=lambda: uvicorn.run(_proxy_app, host="127.0.0.1", port=proxy_port),
+            daemon=True,
+        )
+        t.start()
     if _config.admin_keyphrase:
         logger.info("admin keyphrase auth enabled")
     uvicorn.run(
