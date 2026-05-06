@@ -56,7 +56,11 @@ from pilot.self_updater import start_self_updater, get_self_updater_state, force
 _config: Config = load_config()
 _STATIC_DIR = Path(__file__).parent / "static"
 
-_SESSION_SECRET = secrets.token_bytes(32)
+_SESSION_SECRET = (
+    hmac.new(_config.admin_keyphrase.encode(), b"rcpilot_session_secret_v1", hashlib.sha256).digest()
+    if _config.admin_keyphrase
+    else secrets.token_bytes(32)
+)
 _SESSION_TOKEN = hmac.new(_SESSION_SECRET, b"rcpilot_authenticated", hashlib.sha256).hexdigest()
 _CLAUDE_SETTINGS = Path.home() / ".claude" / "settings.json"
 _CODE_REVIEW_PLUGIN = "code-review@claude-plugins-official"
