@@ -51,6 +51,7 @@ from pilot import sessions as session_mgr
 from pilot.watchdog import start_watchdog
 from pilot.ticker import start_ticker, get_ticker_state
 from pilot.updater import start_updater, get_updater_state, force_update
+from pilot.self_updater import start_self_updater, get_self_updater_state, force_self_upgrade
 
 _config: Config = load_config()
 _STATIC_DIR = Path(__file__).parent / "static"
@@ -101,15 +102,21 @@ async def lifespan(app: FastAPI):  # type: ignore[type-arg]
     logger.info("starting updater (claude_update_cron={!r})", _config.claude_update_cron)
     _up_thread, _up_stop = start_updater(_config)
 
+    _current_version = _read_version()
+    logger.info("starting self-updater (mode={!r})", _config.rcpilot_update_mode)
+    _su_thread, _su_stop = start_self_updater(_config, _current_version)
+
     yield  # server runs here
 
-    logger.info("shutting down — signalling watchdog, ticker and updater")
+    logger.info("shutting down — signalling watchdog, ticker, updater and self-updater")
     _wd_stop.set()
     _wd_thread.join(timeout=5)
     _tk_stop.set()
     _tk_thread.join(timeout=5)
     _up_stop.set()
     _up_thread.join(timeout=5)
+    _su_stop.set()
+    _su_thread.join(timeout=5)
 
 
 app = FastAPI(title="rcpilot", version=_read_version(), lifespan=lifespan)
@@ -201,11 +208,14 @@ def serve_sw() -> FileResponse:
 @app.get("/api/info")
 def get_info() -> dict:
     updater = get_updater_state()
+    self_updater = get_self_updater_state()
     return {
         "version": _read_version(),
         "claude_version": updater["claude_version"],
         "last_check_at": updater["last_check_at"],
         "last_update_at": updater["last_update_at"],
+        "rcpilot_update_available": self_updater["update_available"],
+        "rcpilot_latest_version": self_updater["latest_version"],
     }
 
 
@@ -258,6 +268,13 @@ def trigger_update() -> dict:
     return {"ok": True}
 
 
+@app.post("/api/rcpilot-update")
+def trigger_self_update() -> dict:
+    """Upgrade rcpilot to the latest PyPI version and restart the service."""
+    force_self_upgrade()
+    return {"ok": True}
+
+
 def _get_config_path() -> Path:
     import os
     from pilot.config import DEFAULT_CONFIG_PATH
@@ -297,6 +314,7 @@ def get_config_values() -> dict:
         "db_path": str(_config.db_path),
         "window_cron": _config.window_cron,
         "claude_update_cron": _config.claude_update_cron,
+        "rcpilot_update_mode": _config.rcpilot_update_mode,
     }
 
 
@@ -321,7 +339,7 @@ def restart_service() -> dict:
 @app.put("/api/config")
 def update_config_values(body: dict = Body(...)) -> dict:
     """Persist updated config values to the TOML file. Restart required to take effect."""
-    allowed = {"projects_dir", "host", "port", "window_cron", "claude_update_cron"}
+    allowed = {"projects_dir", "host", "port", "window_cron", "claude_update_cron", "rcpilot_update_mode"}
     updates = {k: v for k, v in body.items() if k in allowed}
     if not updates:
         raise HTTPException(status_code=422, detail="No valid fields provided")

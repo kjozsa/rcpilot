@@ -72,6 +72,9 @@ class Config:
     # HTTP-only proxy port for localhost (used as ANTHROPIC_BASE_URL when TLS is enabled).
     # 0 = auto (port + 1). Only needed when ssl_certfile/ssl_keyfile are set.
     proxy_port: int = 0
+    # Self-update mode: "prompt" shows a banner when a new version is available;
+    # "auto" upgrades and restarts silently.
+    rcpilot_update_mode: str = "prompt"
 
 
 def _prompt_first_run() -> tuple[str, int]:
@@ -132,5 +135,7 @@ def load_config(path: Path | None = None) -> Config:
         kwargs["ssl_keyfile"] = str(Path(raw["ssl_keyfile"]).expanduser())
     if "proxy_port" in raw:
         kwargs["proxy_port"] = int(raw["proxy_port"])
+    if "rcpilot_update_mode" in raw:
+        kwargs["rcpilot_update_mode"] = str(raw["rcpilot_update_mode"]).strip()
 
     return Config(**kwargs)

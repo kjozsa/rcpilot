@@ -75,6 +75,24 @@
     #update-btn.spinning { animation: spin .8s linear infinite; opacity: 1; }
     @keyframes spin { to { transform: rotate(360deg); } }
 
+    #rcpilot-update-banner {
+      display: none;
+      position: fixed;
+      top: 1rem;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--surface);
+      border: 1px solid var(--accent);
+      border-radius: 8px;
+      padding: .6rem 1rem;
+      gap: .75rem;
+      align-items: center;
+      z-index: 9999;
+      white-space: nowrap;
+      box-shadow: 0 4px 16px #0006;
+    }
+    #rcpilot-update-banner.visible { display: flex; }
+
     /* ── Header ──────────────────────────────────────────────────────── */
     header {
       display: flex;
@@ -1709,6 +1727,14 @@
       <span class="settings-hint">Schedule for auto-updating the Claude CLI.</span>
     </div>
     <div class="settings-field">
+      <label class="settings-label" for="cfg-rcpilot-update-mode">rcpilot updates</label>
+      <select id="cfg-rcpilot-update-mode" class="settings-input">
+        <option value="prompt">Prompt (show banner)</option>
+        <option value="auto">Auto (silent upgrade + restart)</option>
+      </select>
+      <span class="settings-hint">How rcpilot handles available updates from PyPI.</span>
+    </div>
+    <div class="settings-field">
       <label class="settings-label" for="cfg-host">Host</label>
       <input type="text" id="cfg-host" class="settings-input" placeholder="0.0.0.0" />
       <span class="settings-hint">Uvicorn bind host. Use 0.0.0.0 to listen on all interfaces.</span>
@@ -1816,6 +1842,14 @@
         if (d.last_check_at) updText += ' · checked ' + fmtAgo(new Date(d.last_check_at));
         if (d.last_update_at) updText += ' · updated ' + fmtAgo(new Date(d.last_update_at));
         updEl.textContent = updText;
+      }
+      if (d.rcpilot_update_available && d.rcpilot_latest_version) {
+        const dismissed = sessionStorage.getItem('rcpilotUpdateDismissed');
+        if (dismissed !== d.rcpilot_latest_version) {
+          document.getElementById('rcpilot-update-msg').textContent =
+            `rcpilot v${d.rcpilot_latest_version} available`;
+          document.getElementById('rcpilot-update-banner').classList.add('visible');
+        }
       }
     });
     loadTicker();
@@ -2832,11 +2866,12 @@
     try {
       const res = await fetch('/api/config');
       const cfg = await res.json();
-      document.getElementById('cfg-projects-dir').value = cfg.projects_dir || '';
-      document.getElementById('cfg-window-cron').value  = cfg.window_cron || '';
-      document.getElementById('cfg-update-cron').value  = cfg.claude_update_cron || '';
-      document.getElementById('cfg-port').value         = cfg.port || '';
-      document.getElementById('cfg-host').value         = cfg.host || '';
+      document.getElementById('cfg-projects-dir').value        = cfg.projects_dir || '';
+      document.getElementById('cfg-window-cron').value          = cfg.window_cron || '';
+      document.getElementById('cfg-update-cron').value          = cfg.claude_update_cron || '';
+      document.getElementById('cfg-port').value                 = cfg.port || '';
+      document.getElementById('cfg-host').value                 = cfg.host || '';
+      document.getElementById('cfg-rcpilot-update-mode').value  = cfg.rcpilot_update_mode || 'prompt';
     } catch (err) {
       showError('Failed to load config: ' + err.message);
     } finally {
@@ -2857,11 +2892,12 @@
     btn.textContent = 'Saving…';
     showError(null);
     const body = {
-      projects_dir:       document.getElementById('cfg-projects-dir').value.trim(),
-      window_cron:        document.getElementById('cfg-window-cron').value.trim(),
-      claude_update_cron: document.getElementById('cfg-update-cron').value.trim(),
-      port:               parseInt(document.getElementById('cfg-port').value.trim(), 10),
-      host:               document.getElementById('cfg-host').value.trim(),
+      projects_dir:         document.getElementById('cfg-projects-dir').value.trim(),
+      window_cron:          document.getElementById('cfg-window-cron').value.trim(),
+      claude_update_cron:   document.getElementById('cfg-update-cron').value.trim(),
+      port:                 parseInt(document.getElementById('cfg-port').value.trim(), 10),
+      host:                 document.getElementById('cfg-host').value.trim(),
+      rcpilot_update_mode:  document.getElementById('cfg-rcpilot-update-mode').value,
     };
     try {
       const res = await fetch('/api/config', {
@@ -2958,11 +2994,40 @@
     _pwaPrompt.userChoice.then(() => { _pwaPrompt = null; pwaDismiss(); });
   }
 
+  async function rcpilotUpdate() {
+    const banner = document.getElementById('rcpilot-update-banner');
+    banner.querySelectorAll('button').forEach(b => b.disabled = true);
+    document.getElementById('rcpilot-update-msg').textContent = 'Updating…';
+    await fetch('/api/rcpilot-update', { method: 'POST' });
+  }
+
+  async function rcpilotUpdateAlways() {
+    await fetch('/api/config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rcpilot_update_mode: 'auto' }),
+    });
+    await rcpilotUpdate();
+  }
+
+  function rcpilotUpdateDismiss() {
+    const msg = document.getElementById('rcpilot-update-msg').textContent;
+    const match = msg.match(/v([\d.]+)/);
+    if (match) sessionStorage.setItem('rcpilotUpdateDismissed', match[1]);
+    document.getElementById('rcpilot-update-banner').classList.remove('visible');
+  }
+
   function pwaDismiss() {
     localStorage.setItem('pwaInstallDismissed', '1');
     document.getElementById('pwa-banner').style.display = 'none';
   }
 </script>
+<div id="rcpilot-update-banner">
+  <span id="rcpilot-update-msg" style="color:var(--text);font-size:.9rem;"></span>
+  <button onclick="rcpilotUpdate()" style="background:var(--accent);color:#fff;border:none;border-radius:5px;padding:.35rem .8rem;cursor:pointer;font-size:.85rem;">Update</button>
+  <button onclick="rcpilotUpdateAlways()" style="background:none;color:var(--muted);border:1px solid var(--border);border-radius:5px;padding:.35rem .8rem;cursor:pointer;font-size:.85rem;" title="Update now and enable auto-updates in future">Always</button>
+  <button onclick="rcpilotUpdateDismiss()" style="background:none;color:var(--muted);border:none;cursor:pointer;font-size:1.1rem;line-height:1;padding:0 .2rem;">✕</button>
+</div>
 <div id="pwa-banner" style="display:none;position:fixed;bottom:1rem;left:50%;transform:translateX(-50%);background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:.6rem 1rem;gap:.75rem;align-items:center;z-index:9999;white-space:nowrap;box-shadow:0 4px 16px #0006;">
   <span style="color:var(--text);font-size:.9rem;">Install rcpilot as an app?</span>
   <button onclick="pwaInstall()" style="background:var(--accent);color:#fff;border:none;border-radius:5px;padding:.35rem .8rem;cursor:pointer;font-size:.85rem;">Install</button>

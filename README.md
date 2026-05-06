@@ -17,12 +17,13 @@ reconnect to, and manage your coding sessions from anywhere.
 - **PR review** — trigger a Claude code review on any open GitHub PR; results posted as a PR comment
 - **Usage tracking** — built-in Anthropic API proxy shows live 5h window utilization in the header
 - **Schedulers** — cron-based usage-window warmer and Claude CLI auto-updater, both configurable
+- **Self-update** — checks PyPI every 6 hours; shows a banner when a new version is available (or upgrades silently in auto mode)
 - **Project import** — clone a GitHub repo directly from the UI
 - **YOLO mode** — global toggle for `--dangerously-skip-permissions`
 - **Watchdog** — marks crashed or timed-out sessions automatically
 - **Restart-safe** — sessions survive rcpilot restarts and Pi reboots
 
-Mobile-first UI, works great on iOS Safari and Android Chrome. No app install needed.
+Mobile-first UI, works great on iOS Safari and Android Chrome. Install as a PWA from Android Chrome for a native app feel — rcpilot will prompt you automatically on first visit.
 
 ---
 
@@ -61,6 +62,9 @@ window_cron = "0 7,12,17 * * *"
 
 # Cron to run "claude update" (set to "" to disable)
 claude_update_cron = "0 6,18 * * *"
+
+# Self-update mode: "prompt" shows a banner; "auto" upgrades and restarts silently
+rcpilot_update_mode = "prompt"
 ```
 
 Supported cron syntax: `*`, `*/n`, `a-b`, `a,b,c` (5-field, local time).
