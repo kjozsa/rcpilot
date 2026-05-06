@@ -1,4 +1,4 @@
-# rcpilot
+<img src="docs/logo/header.svg" alt="$ rcpilot" height="48">
 
 > **Claude Code RC is powerful but ephemeral. rcpilot gives it a home.**
 
