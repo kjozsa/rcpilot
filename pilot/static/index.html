@@ -4,6 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>rcpilot</title>
+  <link rel="manifest" href="/static/manifest.webmanifest" />
+  <meta name="theme-color" content="#7c6af7" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="rcpilot" />
+  <link rel="apple-touch-icon" href="/static/icons/icon-192.png" />
   <style>
     /* ── Reset & tokens ───────────────────────────────────────────────── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1710,6 +1717,10 @@
 <div id="empty-state">No projects found.<br>Use the green <strong>+</strong> button to import from GitHub, or check your <code>projects_dir</code> in config.</div>
 
 <script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  }
+
   // ── State ──────────────────────────────────────────────────────────────
   const sessionState = {};   // project name → array of running session objects
   const historyCache = {};   // project name → array of session records

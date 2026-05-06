@@ -189,6 +189,11 @@ def serve_index() -> FileResponse:
     return FileResponse(_STATIC_DIR / "index.html")
 
 
+@app.get("/sw.js", include_in_schema=False)
+def serve_sw() -> FileResponse:
+    return FileResponse(_STATIC_DIR / "sw.js", media_type="application/javascript")
+
+
 # ---------------------------------------------------------------------------
 # Projects
 # ---------------------------------------------------------------------------
