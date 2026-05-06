@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>rcpilot — icon spec</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<style>
+  :root {
+    --bg: #1d1f21;
+    --surface: #282a2e;
+    --surface-2: #212326;
+    --purple: #b294bb;
+    --orange: #de935f;
+    --text: #c5c8c6;
+    --dim: #6a6d72;
+    --rule: #34373c;
+    --mono: ui-monospace, "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: var(--sans); }
+  body { padding: 64px 80px 96px; max-width: 1280px; margin: 0 auto; }
+
+  .head { display: flex; align-items: center; gap: 24px; padding-bottom: 40px; border-bottom: 1px solid var(--rule); }
+  .head .mark { width: 96px; height: 96px; border-radius: 21px; flex-shrink: 0; }
+  .head h1 { font-family: var(--mono); font-size: 28px; margin: 0 0 6px; font-weight: 600; letter-spacing: -0.01em; }
+  .head h1 .prompt { color: var(--orange); margin-right: 10px; }
+  .head .sub { color: var(--dim); font-size: 14px; }
+  .head .meta { margin-left: auto; text-align: right; font-family: var(--mono); font-size: 12px; color: var(--dim); line-height: 1.7; }
+
+  section { padding: 56px 0; border-bottom: 1px solid var(--rule); }
+  section:last-of-type { border-bottom: none; }
+  h2 { font-family: var(--mono); font-size: 12px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--dim); margin: 0 0 28px; font-weight: 500; }
+  h2::before { content: "// "; color: var(--orange); }
+
+  /* hero — large mark with construction grid */
+  .hero { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center; }
+  .hero-mark { background: var(--surface); padding: 48px; border-radius: 16px; display: flex; justify-content: center; }
+  .hero-mark img { width: 360px; height: 360px; display: block; }
+  .hero-meta { font-family: var(--mono); font-size: 13px; line-height: 1.9; color: var(--text); }
+  .hero-meta .row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px dashed var(--rule); }
+  .hero-meta .row span:first-child { color: var(--dim); }
+  .hero-meta .row span:last-child { color: var(--text); }
+
+  /* size grid */
+  .sizes { display: flex; align-items: flex-end; gap: 32px; flex-wrap: wrap; }
+  .size { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .size img { display: block; image-rendering: pixelated; image-rendering: -moz-crisp-edges; }
+  .size .label { font-family: var(--mono); font-size: 11px; color: var(--dim); }
+  .size .label b { color: var(--text); font-weight: 500; }
+
+  /* contexts */
+  .contexts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+  .ctx { border-radius: 14px; padding: 32px; display: flex; flex-direction: column; align-items: center; gap: 14px; min-height: 220px; justify-content: center; }
+  .ctx .name { font-family: var(--mono); font-size: 11px; color: rgba(255,255,255,0.5); }
+  .ctx-dark { background: #0d0e0f; }
+  .ctx-light { background: #e8e6e1; }
+  .ctx-light .name { color: rgba(0,0,0,0.4); }
+  .ctx-blue { background: linear-gradient(135deg, #2c3e50, #4a6491); }
+  .ctx-purple { background: linear-gradient(135deg, #1a1033, #4a1d6a); }
+  .ctx-photo { background: #1d1f21 url('https://picsum.photos/seed/rcpilot/600/300') center/cover; }
+  .ctx-pi { background: #2a3325; }
+  .ctx img { width: 96px; height: 96px; display: block; }
+
+  /* phone preview — Android home-screen-ish */
+  .phone-row { display: flex; gap: 32px; align-items: flex-start; }
+  .phone {
+    width: 280px; height: 520px; border-radius: 36px; padding: 20px;
+    background: linear-gradient(160deg, #2c3e50 0%, #4a6491 60%, #6b88b3 100%);
+    box-sizing: border-box; flex-shrink: 0;
+    box-shadow: 0 0 0 8px #0d0e0f, 0 30px 60px -20px rgba(0,0,0,0.6);
+    position: relative;
+  }
+  .phone .status {
+    display: flex; justify-content: space-between; align-items: center;
+    color: white; font-family: var(--mono); font-size: 11px; padding: 4px 8px 16px;
+  }
+  .phone .grid {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px 10px;
+    padding: 8px;
+  }
+  .phone .app { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .phone .app .ic {
+    width: 52px; height: 52px; border-radius: 14px; background: rgba(255,255,255,0.18);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .phone .app .ic.real { background: none; padding: 0; }
+  .phone .app .ic img { width: 52px; height: 52px; border-radius: 14px; display: block; }
+  .phone .app .nm { font-family: var(--sans); font-size: 10px; color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.4); }
+  .phone-note { font-family: var(--mono); font-size: 12px; color: var(--dim); line-height: 1.7; max-width: 320px; }
+  .phone-note b { color: var(--text); font-weight: 500; }
+
+  /* color tokens */
+  .tokens { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  .token { background: var(--surface); border-radius: 12px; padding: 20px; }
+  .swatch { width: 100%; height: 56px; border-radius: 8px; margin-bottom: 14px; }
+  .token .name { font-family: var(--mono); font-size: 12px; color: var(--text); font-weight: 500; }
+  .token .role { font-family: var(--sans); font-size: 11px; color: var(--dim); margin-top: 3px; }
+  .token .hex { font-family: var(--mono); font-size: 11px; color: var(--orange); margin-top: 8px; }
+
+  /* downloads */
+  .files { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; font-family: var(--mono); font-size: 12px; }
+  .files .file {
+    display: flex; justify-content: space-between; padding: 10px 16px;
+    background: var(--surface); border-radius: 6px;
+  }
+  .files .file .path { color: var(--text); }
+  .files .file .desc { color: var(--dim); }
+
+  /* construction overlay */
+  .construction { position: relative; width: 360px; height: 360px; }
+  .construction img { width: 100%; height: 100%; }
+  .grid-overlay {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(to right, rgba(178,148,187,0.12) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(178,148,187,0.12) 1px, transparent 1px);
+    background-size: calc(100% / 8) calc(100% / 8);
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+
+<header class="head">
+  <img class="mark" src="icon-512.png" alt="rcpilot">
+  <div>
+    <h1><span class="prompt">$</span>rcpilot</h1>
+    <div class="sub">icon spec sheet · v1.0</div>
+  </div>
+  <div class="meta">
+    paper plane + cursor trail<br>
+    purple #b294bb · orange #de935f<br>
+    bg #1d1f21 (Tomorrow Night)
+  </div>
+</header>
+
+<section>
+  <h2>concept</h2>
+  <div class="hero">
+    <div class="hero-mark">
+      <div class="construction">
+        <img src="icon-512.png" alt="">
+        <div class="grid-overlay"></div>
+      </div>
+    </div>
+    <div class="hero-meta">
+      <div class="row"><span>silhouette</span><span>paper plane</span></div>
+      <div class="row"><span>fold detail</span><span>35% bg knockout</span></div>
+      <div class="row"><span>trail</span><span>3 cursor blocks, fading</span></div>
+      <div class="row"><span>opacity steps</span><span>1.0 → 0.5 → 0.22</span></div>
+      <div class="row"><span>grid</span><span>8 × 8 (64u cells)</span></div>
+      <div class="row"><span>safe area</span><span>~80% inner radius</span></div>
+      <div class="row"><span>corner radius</span><span>22% (112 / 512)</span></div>
+      <div class="row"><span>file format</span><span>SVG · viewBox 0 0 512 512</span></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>sizes — pixel snap check</h2>
+  <div class="sizes">
+    <div class="size"><img src="icon-256.png" width="256" height="256"><span class="label"><b>256</b> · large display</span></div>
+    <div class="size"><img src="icon-128.png" width="128" height="128"><span class="label"><b>128</b> · macOS dock</span></div>
+    <div class="size"><img src="icon-96.png" width="96" height="96"><span class="label"><b>96</b> · android xhdpi</span></div>
+    <div class="size"><img src="icon-64.png" width="64" height="64"><span class="label"><b>64</b> · tab bar</span></div>
+    <div class="size"><img src="icon-48.png" width="48" height="48"><span class="label"><b>48</b> · android mdpi</span></div>
+    <div class="size"><img src="icon-32.png" width="32" height="32"><span class="label"><b>32</b> · favicon</span></div>
+    <div class="size"><img src="icon-16.png" width="16" height="16"><span class="label"><b>16</b> · tab favicon</span></div>
+  </div>
+</section>
+
+<section>
+  <h2>contexts</h2>
+  <div class="contexts">
+    <div class="ctx ctx-dark"><img src="icon-128.png"><div class="name">on dark</div></div>
+    <div class="ctx ctx-light"><img src="icon-128.png"><div class="name">on light</div></div>
+    <div class="ctx ctx-blue"><img src="icon-128.png"><div class="name">on blue</div></div>
+    <div class="ctx ctx-purple"><img src="icon-128.png"><div class="name">on purple wallpaper</div></div>
+    <div class="ctx ctx-pi"><img src="icon-128.png"><div class="name">terminal / pi green</div></div>
+    <div class="ctx ctx-photo"><img src="icon-128.png"><div class="name">on photo</div></div>
+  </div>
+</section>
+
+<section>
+  <h2>android home screen</h2>
+  <div class="phone-row">
+    <div class="phone">
+      <div class="status"><span>9:41</span><span>● ▲ ▮▮▮</span></div>
+      <div class="grid">
+        <div class="app"><div class="ic"></div><div class="nm">Phone</div></div>
+        <div class="app"><div class="ic"></div><div class="nm">Messages</div></div>
+        <div class="app"><div class="ic"></div><div class="nm">Camera</div></div>
+        <div class="app"><div class="ic"></div><div class="nm">Settings</div></div>
+        <div class="app"><div class="ic real"><img src="icon-512.png"></div><div class="nm">rcpilot</div></div>
+        <div class="app"><div class="ic"></div><div class="nm">Terminal</div></div>
+        <div class="app"><div class="ic"></div><div class="nm">GitHub</div></div>
+        <div class="app"><div class="ic"></div><div class="nm">Files</div></div>
+        <div class="app"><div class="ic"></div><div class="nm">Calendar</div></div>
+        <div class="app"><div class="ic"></div><div class="nm">Mail</div></div>
+        <div class="app"><div class="ic"></div><div class="nm">Music</div></div>
+        <div class="app"><div class="ic"></div><div class="nm">Maps</div></div>
+      </div>
+    </div>
+    <div class="phone-note">
+      <b>PWA launcher icon.</b><br>
+      Renders on the home screen at the OS-imposed corner radius. The icon's own 22% radius is close to Android's adaptive-icon mask, so it nests cleanly. <br><br>
+      A <code>maskable</code> variant is also exported (<code>maskable-512.png</code>) — same artwork without baked corners, full bleed, for Android adaptive icons. Reference it in your manifest with <code>"purpose": "maskable"</code>.
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>color tokens</h2>
+  <div class="tokens">
+    <div class="token">
+      <div class="swatch" style="background:#1d1f21; border: 1px solid var(--rule);"></div>
+      <div class="name">background</div>
+      <div class="role">icon plate</div>
+      <div class="hex">#1d1f21</div>
+    </div>
+    <div class="token">
+      <div class="swatch" style="background:#b294bb;"></div>
+      <div class="name">primary</div>
+      <div class="role">plane silhouette</div>
+      <div class="hex">#b294bb</div>
+    </div>
+    <div class="token">
+      <div class="swatch" style="background:#de935f;"></div>
+      <div class="name">accent</div>
+      <div class="role">cursor trail</div>
+      <div class="hex">#de935f</div>
+    </div>
+    <div class="token">
+      <div class="swatch" style="background:#1d1f21; opacity: 0.35; border: 1px solid var(--rule);"></div>
+      <div class="name">fold</div>
+      <div class="role">bg @ 35%</div>
+      <div class="hex">#1d1f21 · α 0.35</div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>files</h2>
+  <div class="files">
+    <div class="file"><span class="path">rcpilot-icon.svg</span><span class="desc">master · 512 viewBox · with bg</span></div>
+    <div class="file"><span class="path">rcpilot-icon-transparent.svg</span><span class="desc">no bg · for compositing</span></div>
+    <div class="file"><span class="path">favicon.svg</span><span class="desc">scalable favicon</span></div>
+    <div class="file"><span class="path">icon-512.png</span><span class="desc">PWA primary</span></div>
+    <div class="file"><span class="path">icon-256.png</span><span class="desc">large display</span></div>
+    <div class="file"><span class="path">icon-192.png</span><span class="desc">PWA secondary</span></div>
+    <div class="file"><span class="path">icon-128.png</span><span class="desc">macOS dock</span></div>
+    <div class="file"><span class="path">icon-96.png</span><span class="desc">android xhdpi</span></div>
+    <div class="file"><span class="path">icon-64.png</span><span class="desc">tab bar</span></div>
+    <div class="file"><span class="path">icon-48.png</span><span class="desc">android mdpi</span></div>
+    <div class="file"><span class="path">icon-32.png</span><span class="desc">favicon</span></div>
+    <div class="file"><span class="path">icon-16.png</span><span class="desc">tab favicon</span></div>
+    <div class="file"><span class="path">icon-512-transparent.png</span><span class="desc">no bg raster</span></div>
+    <div class="file"><span class="path">maskable-512.png</span><span class="desc">android adaptive · full bleed</span></div>
+  </div>
+</section>
+
+</body>
+</html>
