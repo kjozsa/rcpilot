@@ -319,6 +319,7 @@ def get_config_values() -> dict:
         "window_cron": _config.window_cron,
         "claude_update_cron": _config.claude_update_cron,
         "rcpilot_update_mode": _config.rcpilot_update_mode,
+        "permission_mode": _config.permission_mode,
     }
 
 
@@ -665,6 +666,7 @@ def start_session(
         db_path=str(_config.db_path),
         yolo=yolo,
         proxy_url=_proxy_url(),
+        permission_mode=_config.permission_mode,
     )
 
 
@@ -703,6 +705,7 @@ def resume_session(
         db_path=str(_config.db_path),
         yolo=yolo,
         proxy_url=_proxy_url(),
+        permission_mode=_config.permission_mode,
     )
 
 

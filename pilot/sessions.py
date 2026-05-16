@@ -81,6 +81,7 @@ def start_session(
     db_path: str,
     yolo: bool = False,
     proxy_url: str | None = None,
+    permission_mode: str = "auto",
 ) -> dict[str, Any]:
     """
     Spawn `claude remote-control` via `script`. Blocks until URL is captured or timeout.
@@ -90,8 +91,10 @@ def start_session(
     log_path = db_dir / f"session-{secrets.token_hex(6)}.log"
 
     claude_cmd = f"claude remote-control --spawn=session --name {claude_name!r}"
-    if yolo:
-        claude_cmd += " --permission-mode bypassPermissions"
+    # YOLO overrides the configured permission mode with bypassPermissions.
+    effective_mode = "bypassPermissions" if yolo else permission_mode
+    if effective_mode and effective_mode != "default":
+        claude_cmd += f" --permission-mode {effective_mode}"
 
     # Wrap in systemd-run --scope so the process lives in its own transient
     # cgroup, outside the rcpilot service cgroup.  Without this, systemd's
@@ -167,6 +170,7 @@ def resume_session(
     db_path: str,
     yolo: bool = False,
     proxy_url: str | None = None,
+    permission_mode: str = "auto",
 ) -> dict[str, Any]:
     """
     Start a new session as a continuation of a previous one.
@@ -178,7 +182,10 @@ def resume_session(
     old_name = record.get("name") or record.get("started_at", "")[:10]
     db_name = f"cont. {old_name}"
     claude_name = f"{project} - {db_name}"
-    return start_session(project, project_path, db_name, claude_name, db_path, yolo=yolo, proxy_url=proxy_url)
+    return start_session(
+        project, project_path, db_name, claude_name, db_path,
+        yolo=yolo, proxy_url=proxy_url, permission_mode=permission_mode,
+    )
 
 
 def kill_session(session_id: int, db_path: str) -> dict[str, Any]:

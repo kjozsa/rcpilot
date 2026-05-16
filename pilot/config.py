@@ -31,6 +31,10 @@ db_path = "~/.config/rcpilot/pilot.db"
 # Example: window_cron = "0 7,12,17 * * *"   # fire at 07:00, 12:00, and 17:00 daily
 window_cron = "0 7,12,17 * * *"
 
+# Permission mode for newly spawned sessions. One of: default, auto, acceptEdits,
+# dontAsk, plan, bypassPermissions. YOLO mode overrides this with bypassPermissions.
+permission_mode = "auto"
+
 # ── Security (optional) ────────────────────────────────────────────────────
 # Protect the UI with a keyphrase. Without this, anyone on your network can
 # access rcpilot. Recommended if visitors use your local network.
@@ -75,6 +79,10 @@ class Config:
     # Self-update mode: "prompt" shows a banner when a new version is available;
     # "auto" upgrades and restarts silently.
     rcpilot_update_mode: str = "prompt"
+    # Permission mode for newly spawned sessions. One of: default, auto,
+    # acceptEdits, dontAsk, plan, bypassPermissions. YOLO mode overrides this
+    # with bypassPermissions.
+    permission_mode: str = "auto"
 
 
 def _prompt_first_run() -> tuple[str, int]:
@@ -137,5 +145,7 @@ def load_config(path: Path | None = None) -> Config:
         kwargs["proxy_port"] = int(raw["proxy_port"])
     if "rcpilot_update_mode" in raw:
         kwargs["rcpilot_update_mode"] = str(raw["rcpilot_update_mode"]).strip()
+    if "permission_mode" in raw:
+        kwargs["permission_mode"] = str(raw["permission_mode"]).strip()
 
     return Config(**kwargs)
