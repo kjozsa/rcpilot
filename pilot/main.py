@@ -344,7 +344,7 @@ def restart_service() -> dict:
 @app.put("/api/config")
 def update_config_values(body: dict = Body(...)) -> dict:
     """Persist updated config values to the TOML file. Restart required to take effect."""
-    allowed = {"projects_dir", "host", "port", "window_cron", "claude_update_cron", "rcpilot_update_mode"}
+    allowed = {"projects_dir", "host", "port", "window_cron", "claude_update_cron", "rcpilot_update_mode", "permission_mode"}
     updates = {k: v for k, v in body.items() if k in allowed}
     if not updates:
         raise HTTPException(status_code=422, detail="No valid fields provided")

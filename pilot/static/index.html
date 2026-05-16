@@ -1736,6 +1736,18 @@
       <span class="settings-hint">How rcpilot handles available updates from PyPI.</span>
     </div>
     <div class="settings-field">
+      <label class="settings-label" for="cfg-permission-mode">Permission mode</label>
+      <select id="cfg-permission-mode" class="settings-input">
+        <option value="auto">Auto</option>
+        <option value="default">Default</option>
+        <option value="acceptEdits">Accept edits</option>
+        <option value="dontAsk">Don't ask</option>
+        <option value="plan">Plan</option>
+        <option value="bypassPermissions">Bypass permissions</option>
+      </select>
+      <span class="settings-hint">Permission mode for newly spawned sessions. YOLO mode overrides this with bypass permissions.</span>
+    </div>
+    <div class="settings-field">
       <label class="settings-label" for="cfg-host">Host</label>
       <input type="text" id="cfg-host" class="settings-input" placeholder="0.0.0.0" />
       <span class="settings-hint">Uvicorn bind host. Use 0.0.0.0 to listen on all interfaces.</span>
@@ -2873,6 +2885,7 @@
       document.getElementById('cfg-port').value                 = cfg.port || '';
       document.getElementById('cfg-host').value                 = cfg.host || '';
       document.getElementById('cfg-rcpilot-update-mode').value  = cfg.rcpilot_update_mode || 'prompt';
+      document.getElementById('cfg-permission-mode').value      = cfg.permission_mode || 'auto';
     } catch (err) {
       showError('Failed to load config: ' + err.message);
     } finally {
@@ -2899,6 +2912,7 @@
       port:                 parseInt(document.getElementById('cfg-port').value.trim(), 10),
       host:                 document.getElementById('cfg-host').value.trim(),
       rcpilot_update_mode:  document.getElementById('cfg-rcpilot-update-mode').value,
+      permission_mode:      document.getElementById('cfg-permission-mode').value,
     };
     try {
       const res = await fetch('/api/config', {
