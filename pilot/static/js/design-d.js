@@ -143,6 +143,9 @@
     color: var(--green);
     font-weight: 700;
   }
+  header h1 .rcpilot-name .rcpilot-suffix {
+    color: var(--accent);
+  }
   header h1 #version, header h1 small {
     color: var(--muted) !important;
     font-size: .65rem !important;
@@ -802,18 +805,25 @@
   function rewriteHeader() {
     const h1 = document.querySelector('header h1');
     if (h1) {
-      h1.querySelectorAll('span').forEach(s => {
-        if (s.textContent.trim() === '-') s.remove();
-      });
       const version = h1.querySelector('#version');
+      // Wordmark = all title text (text nodes *and* span contents), minus the
+      // version element and any legacy hyphen separator → "rcpilot".
       const text = [...h1.childNodes]
-        .filter(n => n.nodeType === 3)
+        .filter(n => n !== version)
         .map(n => n.textContent)
-        .join('').replace(/\s+/g, '');
+        .join('').replace(/[\s-]+/g, '') || 'rcpilot';
       h1.innerHTML = '';
       const name = document.createElement('span');
       name.className = 'rcpilot-name';
-      name.textContent = text || 'rcpilot';
+      // Bicolor split: "rc" in the base text colour, the rest ("pilot") in the
+      // accent — matching rctrader. The green "$ " prompt is a ::before.
+      name.appendChild(document.createTextNode(text.slice(0, 2)));
+      if (text.length > 2) {
+        const suffix = document.createElement('span');
+        suffix.className = 'rcpilot-suffix';
+        suffix.textContent = text.slice(2);
+        name.appendChild(suffix);
+      }
       h1.appendChild(name);
       if (version) h1.appendChild(version);
     }
