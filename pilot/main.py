@@ -154,6 +154,24 @@ async def _auth_middleware(request: Request, call_next):
     return JSONResponse({"detail": "Unauthorized"}, status_code=401)
 
 
+@app.middleware("http")
+async def _no_cache_app_shell(request: Request, call_next):
+    """Force the browser to revalidate app-shell assets on every load.
+
+    FileResponse/StaticFiles set etag + last-modified but no Cache-Control, so
+    browsers apply *heuristic* caching and may serve a stale index.html / CSS /
+    icon for a while after a deploy without ever checking the server. That masks
+    updates (e.g. a changed header wordmark) and surfaces ghosts like an old
+    cached favicon. ``no-cache`` keeps the cheap 304 fast-path but guarantees a
+    changed file is fetched fresh on the next request.
+    """
+    response = await call_next(request)
+    path = request.url.path
+    if path in ("/", "/sw.js") or path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
 @app.get("/api/auth/status")
 def auth_status(request: Request) -> dict:
     enabled = bool(_config.admin_keyphrase)
