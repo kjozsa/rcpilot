@@ -23,6 +23,7 @@ import secrets
 import signal
 import subprocess
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -137,6 +138,22 @@ def start_session(
     return {"status": "running", "rc_url": url, "session_id": sid, "name": db_name}
 
 
+def _last_activity(log_path: str | None, fallback: str) -> str:
+    """ISO-8601 UTC time of the session's most recent activity.
+
+    `script` writes PTY output to the log file continuously, so its mtime tracks
+    the latest terminal activity. Imported sessions have no log file — fall back
+    to started_at.
+    """
+    if log_path:
+        try:
+            mtime = os.path.getmtime(log_path)
+            return datetime.fromtimestamp(mtime, timezone.utc).isoformat()
+        except OSError:
+            pass
+    return fallback
+
+
 def list_running_sessions(project: str, db_path: str) -> list[dict[str, Any]]:
     """
     Return all live running sessions for *project*.
@@ -149,13 +166,15 @@ def list_running_sessions(project: str, db_path: str) -> list[dict[str, Any]]:
         pid = record.get("pid")
         is_imported = bool(record.get("imported"))
         if is_imported or (pid and _pid_alive(pid)):
+            started_at = record.get("started_at") or ""
             result.append({
                 "id": record["id"],
                 "name": record["name"] or "",
                 "rc_url": record["rc_url"],
                 "status": "running",
                 "imported": is_imported,
-                "started_at": record.get("started_at") or "",
+                "started_at": started_at,
+                "last_activity": _last_activity(record.get("log_path"), started_at),
             })
         else:
             logger.debug("stale running record {} — pid {} gone, marking stopped", record["id"], pid)

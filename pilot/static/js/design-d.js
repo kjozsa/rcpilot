@@ -787,7 +787,8 @@
         all.push({ repo: name, session: s });
       }
     }
-    all.sort((a, b) => (b.session.started_at || '').localeCompare(a.session.started_at || ''));
+    const activity = s => s.last_activity || s.started_at || '';
+    all.sort((a, b) => activity(b.session).localeCompare(activity(a.session)));
     countEl.textContent = all.length;
     strip.classList.toggle('has-any', all.length > 0);
     const esc = window.escHtml;

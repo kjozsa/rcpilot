@@ -8,7 +8,16 @@ from pilot.main import app
 
 @pytest.fixture
 def client():
-    return TestClient(app)
+    # These tests exercise the import logic, not auth. Clear any admin_keyphrase
+    # picked up from the deployment's config so the auth middleware short-circuits
+    # (it lets every request through when no keyphrase is set).
+    from pilot import main
+    original_keyphrase = main._config.admin_keyphrase
+    main._config.admin_keyphrase = ""
+    try:
+        yield TestClient(app)
+    finally:
+        main._config.admin_keyphrase = original_keyphrase
 
 
 def test_import_project_success(client, tmp_path, monkeypatch):
