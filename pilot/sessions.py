@@ -73,6 +73,25 @@ def _poll_log_for_url(log_path: Path, timeout: float) -> tuple[str | None, str]:
     return None, _strip_ansi(text)
 
 
+def _clear_bridge_pointer(project_path: str) -> None:
+    """Remove ~/.claude/projects/<encoded-cwd>/bridge-pointer.json if it exists.
+
+    Claude code 2.1.x caches a sessionId in this file and reuses it when a
+    new `claude remote-control --spawn=session` runs within 4h. That makes
+    "New Session" silently reattach to the previous one. Delete it so the
+    user always gets a fresh session.
+    """
+    encoded = str(Path(project_path).resolve()).replace("/", "-")
+    pointer = Path.home() / ".claude" / "projects" / encoded / "bridge-pointer.json"
+    try:
+        pointer.unlink()
+        logger.info("cleared bridge-pointer at {}", pointer)
+    except FileNotFoundError:
+        pass
+    except OSError as exc:
+        logger.warning("could not remove bridge-pointer {}: {}", pointer, exc)
+
+
 
 def start_session(
     project: str,
@@ -90,6 +109,8 @@ def start_session(
     """
     db_dir = Path(db_path).parent
     log_path = db_dir / f"session-{secrets.token_hex(6)}.log"
+
+    _clear_bridge_pointer(project_path)
 
     claude_cmd = f"claude remote-control --spawn=session --name {claude_name!r}"
     # YOLO overrides the configured permission mode with bypassPermissions.
