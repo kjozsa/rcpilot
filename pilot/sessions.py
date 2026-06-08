@@ -1,7 +1,7 @@
 """
 Session management — spawn / kill / query claude remote-control via `script`.
 
-Each session runs `claude remote-control --spawn=session` inside the `script`
+Each session runs `claude remote-control --spawn=same-dir` inside the `script`
 command, which creates and owns a PTY independently of this Python process.
 All output is written to a log file. Because `script` is a separate OS process,
 sessions survive FastAPI restarts — the log file and pid are persisted in SQLite.
@@ -76,10 +76,10 @@ def _poll_log_for_url(log_path: Path, timeout: float) -> tuple[str | None, str]:
 def _clear_bridge_pointer(project_path: str) -> None:
     """Remove ~/.claude/projects/<encoded-cwd>/bridge-pointer.json if it exists.
 
-    Claude code 2.1.x caches a sessionId in this file and reuses it when a
-    new `claude remote-control --spawn=session` runs within 4h. That makes
-    "New Session" silently reattach to the previous one. Delete it so the
-    user always gets a fresh session.
+    Claude code 2.1.x caches the environmentId in this file and reuses it when
+    a new `claude remote-control` runs within 4h. In --spawn=same-dir mode that
+    makes every "New Session" reattach to the same environment URL. Delete it so
+    each spawn registers a fresh environment and gets its own distinct URL.
     """
     encoded = str(Path(project_path).resolve()).replace("/", "-")
     pointer = Path.home() / ".claude" / "projects" / encoded / "bridge-pointer.json"
@@ -112,7 +112,17 @@ def start_session(
 
     _clear_bridge_pointer(project_path)
 
-    claude_cmd = f"claude remote-control --spawn=session --name {claude_name!r}"
+    # Use --spawn=same-dir (not --spawn=session). As of claude 2.1.x,
+    # --spawn=session prints a /session_<id> deep link that the web/mobile app
+    # opens as a *cloud container*, whereas --spawn=same-dir prints a
+    # ?environment=<env-id> URL that attaches to the LOCAL session running here.
+    #
+    # NOTE: --name only labels the pre-created session. When the user opens the
+    # ?environment= URL the web app drops them into a fresh on-demand session
+    # with no explicit name, so claude.ai auto-titles it from the first prompt.
+    # As of claude 2.1.x there is no CLI flag that forces a fixed name onto that
+    # on-demand session; the rcpilot-side name is tracked in our own DB/UI.
+    claude_cmd = f"claude remote-control --spawn=same-dir --name {claude_name!r}"
     # YOLO overrides the configured permission mode with bypassPermissions.
     effective_mode = "bypassPermissions" if yolo else permission_mode
     if effective_mode and effective_mode != "default":
