@@ -24,7 +24,7 @@ import subprocess
 import threading
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable, Optional
 
 from loguru import logger
 
@@ -46,6 +46,12 @@ _state: dict = {
     "last_update_ok": None,     # bool
 }
 _state_lock = threading.Lock()
+
+# Optional callback fired (old_version, new_version) whenever `claude update`
+# actually changes the installed version. Used to restart running remote-control
+# sessions, which stay pinned to their spawn-time version and become un-attachable
+# once the launcher advances underneath them.
+_on_version_change: Optional[Callable[[Optional[str], str], None]] = None
 
 
 def get_updater_state() -> dict:
@@ -185,9 +191,19 @@ def _run_update(now: datetime) -> None:
         if version:
             _state["claude_version"] = version
         _state["last_check_at"] = now.isoformat(timespec="seconds")
-        if ok and version and version != old_version:
+        changed = bool(ok and version and old_version and version != old_version)
+        if changed:
             _state["last_update_at"] = now.isoformat(timespec="seconds")
         _state["last_update_ok"] = ok
+
+    # Fire the version-change callback outside the lock — restarting sessions is
+    # slow and blocking, and must not run while holding _state_lock.
+    if changed and _on_version_change is not None:
+        logger.info("updater: claude {} -> {}; running version-change callback", old_version, version)
+        try:
+            _on_version_change(old_version, version)
+        except Exception:
+            logger.exception("updater: on_version_change callback failed")
 
 
 def force_update() -> None:
@@ -195,8 +211,18 @@ def force_update() -> None:
     threading.Thread(target=_run_update, args=(datetime.now(),), daemon=True, name="pilot-updater-manual").start()
 
 
-def start_updater(config: "Config") -> tuple[threading.Thread, threading.Event]:
-    """Start the updater thread. Returns (thread, stop_event)."""
+def start_updater(
+    config: "Config",
+    on_version_change: Optional[Callable[[Optional[str], str], None]] = None,
+) -> tuple[threading.Thread, threading.Event]:
+    """Start the updater thread. Returns (thread, stop_event).
+
+    *on_version_change* is invoked as (old_version, new_version) whenever a
+    `claude update` actually installs a new version (both cron-driven and manual
+    force_update()).
+    """
+    global _on_version_change
+    _on_version_change = on_version_change
     stop_event = threading.Event()
     thread = threading.Thread(
         target=_updater_loop,

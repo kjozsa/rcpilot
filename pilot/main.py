@@ -104,7 +104,7 @@ async def lifespan(app: FastAPI):  # type: ignore[type-arg]
     _tk_thread, _tk_stop = start_ticker(_config)
 
     logger.info("starting updater (claude_update_cron={!r})", _config.claude_update_cron)
-    _up_thread, _up_stop = start_updater(_config)
+    _up_thread, _up_stop = start_updater(_config, on_version_change=_restart_running_claude_sessions)
 
     _current_version = _read_version()
     logger.info("starting self-updater (mode={!r})", _config.rcpilot_update_mode)
@@ -566,6 +566,70 @@ def _accept_claude_trust(project_path: Path) -> None:
             logger.info("accepted claude trust for {}", key)
         except Exception as exc:
             logger.warning("could not write trust entry to ~/.claude.json: {}", exc)
+
+
+def _session_used_bypass(pid: int | None) -> bool:
+    """True if the session's `script` process was launched with bypassPermissions (yolo).
+
+    Read from the live process cmdline so a restarted session keeps its original
+    permission mode rather than silently falling back to the configured default.
+    """
+    if not pid:
+        return False
+    try:
+        raw = Path(f"/proc/{pid}/cmdline").read_bytes()
+    except OSError:
+        return False
+    return "bypassPermissions" in raw.replace(b"\x00", b" ").decode(errors="replace")
+
+
+def _restart_running_claude_sessions(old_version: str | None = None, new_version: str | None = None) -> None:
+    """Kill and re-spawn every running (non-imported) session after a `claude update`.
+
+    Remote-control servers stay pinned to the claude version they were spawned
+    with, so once the launcher advances claude.ai can no longer attach across the
+    version skew (EAUTH / stale bridge). Re-spawning puts each session on the new
+    version with a fresh, attachable environment URL. The original name and
+    permission mode are preserved; imported sessions (no pid) are left untouched.
+    """
+    db_path = str(_config.db_path)
+    try:
+        records = pilot_db.get_all_running_sessions(db_path)
+    except Exception:
+        logger.exception("restart-on-update: could not list running sessions")
+        return
+
+    projects = {p["name"]: p["path"] for p in list_projects(_config.projects_dir)}
+    proxy = _proxy_url()
+    restarted = 0
+    for rec in records:
+        if rec.get("imported"):
+            continue
+        project = rec["project"]
+        path = projects.get(project)
+        if not path:
+            logger.warning("restart-on-update: no path for project {!r}; skipping session {}", project, rec.get("id"))
+            continue
+        db_name = rec.get("name") or (rec.get("started_at") or "")[:16] or "session"
+        yolo = _session_used_bypass(rec.get("pid"))
+        logger.info("restart-on-update: restarting id={} project={} name={!r} yolo={}", rec.get("id"), project, db_name, yolo)
+        try:
+            session_mgr.kill_session(rec["id"], db_path)
+            _accept_claude_trust(Path(path))
+            session_mgr.start_session(
+                project=project,
+                project_path=path,
+                db_name=db_name,
+                claude_name=f"{project} - {db_name}",
+                db_path=db_path,
+                yolo=yolo,
+                proxy_url=proxy,
+                permission_mode=_config.permission_mode,
+            )
+            restarted += 1
+        except Exception:
+            logger.exception("restart-on-update: failed to restart session id={}", rec.get("id"))
+    logger.info("restart-on-update: restarted {} session(s) on claude {}", restarted, new_version or "?")
 
 
 @app.post("/api/projects/import")
