@@ -100,12 +100,18 @@ def start_session(
     claude_name: str,
     db_path: str,
     yolo: bool = False,
-    proxy_url: str | None = None,
     permission_mode: str = "auto",
 ) -> dict[str, Any]:
     """
     Spawn `claude remote-control` via `script`. Blocks until URL is captured or timeout.
     Returns dict with keys: status, rc_url, session_id, name.
+
+    NOTE: remote-control sessions must NOT set ANTHROPIC_BASE_URL. As of claude
+    2.1.x, `claude remote-control` refuses to start ("Remote Control is only
+    available when using Claude via api.anthropic.com.") unless the base URL is
+    unset or its host is exactly api.anthropic.com. So we let the session inherit
+    the service env and talk to Anthropic directly — the usage-stats proxy only
+    sits in front of the non-interactive `claude -p` calls.
     """
     db_dir = Path(db_path).parent
     log_path = db_dir / f"session-{secrets.token_hex(6)}.log"
@@ -138,15 +144,10 @@ def start_session(
     ]
     logger.info("start_session: project={} db_name={!r} claude_name={!r} log={}", project, db_name, claude_name, log_path)
 
-    env = None
-    if proxy_url:
-        env = os.environ.copy()
-        env["ANTHROPIC_BASE_URL"] = proxy_url
-
     proc = subprocess.Popen(
         cmd,
         cwd=project_path,
-        env=env,
+        env=None,
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
@@ -219,7 +220,6 @@ def resume_session(
     project_path: str,
     db_path: str,
     yolo: bool = False,
-    proxy_url: str | None = None,
     permission_mode: str = "auto",
 ) -> dict[str, Any]:
     """
@@ -234,7 +234,7 @@ def resume_session(
     claude_name = f"{project} - {db_name}"
     return start_session(
         project, project_path, db_name, claude_name, db_path,
-        yolo=yolo, proxy_url=proxy_url, permission_mode=permission_mode,
+        yolo=yolo, permission_mode=permission_mode,
     )
 
 

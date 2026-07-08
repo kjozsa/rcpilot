@@ -600,7 +600,6 @@ def _restart_running_claude_sessions(old_version: str | None = None, new_version
         return
 
     projects = {p["name"]: p["path"] for p in list_projects(_config.projects_dir)}
-    proxy = _proxy_url()
     restarted = 0
     for rec in records:
         if rec.get("imported"):
@@ -623,7 +622,6 @@ def _restart_running_claude_sessions(old_version: str | None = None, new_version
                 claude_name=f"{project} - {db_name}",
                 db_path=db_path,
                 yolo=yolo,
-                proxy_url=proxy,
                 permission_mode=_config.permission_mode,
             )
             restarted += 1
@@ -747,7 +745,6 @@ def start_session(
         claude_name=claude_name,
         db_path=str(_config.db_path),
         yolo=yolo,
-        proxy_url=_proxy_url(),
         permission_mode=_config.permission_mode,
     )
 
@@ -786,7 +783,6 @@ def resume_session(
         project_path=path,
         db_path=str(_config.db_path),
         yolo=yolo,
-        proxy_url=_proxy_url(),
         permission_mode=_config.permission_mode,
     )
 
