@@ -1403,6 +1403,36 @@
       cursor: pointer;
     }
     #settings-save:disabled { opacity: .4; cursor: default; }
+    /* Remote hosts block inside settings */
+    #cfg-hosts-list:empty { display: none; }
+    .cfg-host-row {
+      display: flex; align-items: center; gap: .5rem;
+      padding: .45rem .55rem; margin-bottom: .4rem;
+      background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
+      font-size: .8rem;
+    }
+    .cfg-host-row .dot { width: 7px; height: 7px; border-radius: 4px; flex-shrink: 0; background: var(--green); }
+    .cfg-host-row .dot.off { background: var(--red); }
+    .cfg-host-row .who { font-weight: 600; color: var(--text); flex-shrink: 0; }
+    .cfg-host-row .dirs {
+      color: var(--muted); font-size: .72rem; flex: 1 1 auto; min-width: 0;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .cfg-host-row .rm {
+      background: var(--red-tint); color: var(--red); cursor: pointer;
+      border: 1px solid color-mix(in srgb, var(--red) 35%, transparent);
+      border-radius: 6px; padding: .15rem .5rem; font-size: .7rem; font-family: inherit;
+      flex-shrink: 0;
+    }
+    #cfg-host-form { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .35rem; }
+    #cfg-host-form .settings-input { flex: 1 1 45%; min-width: 0; margin: 0; }
+    #cfg-host-add {
+      background: var(--green-tint); color: var(--green);
+      border: 1px solid color-mix(in srgb, var(--green) 40%, transparent);
+      border-radius: 8px; padding: .45rem .8rem; cursor: pointer;
+      font-family: inherit; font-size: .8rem; font-weight: 600; flex-shrink: 0;
+    }
+    #cfg-host-add:disabled { opacity: .5; cursor: default; }
     #settings-cancel {
       background: none;
       border: 1px solid var(--border);
@@ -1753,6 +1783,18 @@
         <option value="bypassPermissions">Bypass permissions</option>
       </select>
       <span class="settings-hint">Permission mode for newly spawned sessions. YOLO mode overrides this with bypass permissions.</span>
+    </div>
+    <div class="settings-field">
+      <div class="settings-label">Remote hosts</div>
+      <div id="cfg-hosts-list"></div>
+      <div id="cfg-host-form">
+        <input type="text" id="cfg-host-ssh" class="settings-input" placeholder="stardust  (or kjozsa@stardust)" />
+        <input type="text" id="cfg-host-dirs" class="settings-input" placeholder="~/projects, ~/work/repos" />
+        <button id="cfg-host-add" onclick="addRemoteHost()">+ Add host</button>
+      </div>
+      <span class="settings-hint">Manage projects on another machine over ssh. Needs key-based ssh
+        from here and a systemd user manager there (<code>loginctl enable-linger</code>).
+        Several directories can be listed, comma separated. Applied immediately — no restart.</span>
     </div>
     <div class="settings-field">
       <label class="settings-label" for="cfg-host">Host</label>
@@ -2946,11 +2988,84 @@
       document.getElementById('cfg-host').value                 = cfg.host || '';
       document.getElementById('cfg-rcpilot-update-mode').value  = cfg.rcpilot_update_mode || 'prompt';
       document.getElementById('cfg-permission-mode').value      = cfg.permission_mode || 'auto';
+      // Draw from the cached probe so the sheet opens instantly, then refresh.
+      renderHostRows();
+      loadHosts().then(renderHostRows);
     } catch (err) {
       showError('Failed to load config: ' + err.message);
     } finally {
       btn.disabled = false;
       btn.textContent = 'Save';
+    }
+  }
+
+  // ── Remote hosts (settings) ────────────────────────────────────────────
+  // Host changes save immediately rather than on the Save button: they take
+  // effect without a restart, and mixing them into the restart-required fields
+  // would make people restart for nothing.
+  function renderHostRows() {
+    const list = document.getElementById('cfg-hosts-list');
+    if (!list) return;
+    list.innerHTML = (window.knownHosts || []).map(h => `
+      <div class="cfg-host-row">
+        <span class="dot ${h.online ? '' : 'off'}" title="${h.online ? 'reachable' : escHtml(h.error || 'unreachable')}"></span>
+        <span class="who">${escHtml(h.name)}</span>
+        <span class="dirs">${escHtml((h.projects_dirs || []).join('  '))}</span>
+        <button class="rm" data-host="${escHtml(h.name)}">remove</button>
+      </div>`).join('');
+    list.querySelectorAll('.rm').forEach(b =>
+      b.addEventListener('click', () => removeRemoteHost(b.dataset.host)));
+  }
+
+  async function addRemoteHost() {
+    const ssh = document.getElementById('cfg-host-ssh').value.trim();
+    const dirs = document.getElementById('cfg-host-dirs').value.trim();
+    if (!ssh) { showError('Enter a hostname, e.g. stardust or kjozsa@stardust'); return; }
+    const btn = document.getElementById('cfg-host-add');
+    btn.disabled = true;
+    btn.textContent = 'Connecting…';
+    showError(null);
+    try {
+      const res = await fetch('/api/hosts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ssh, projects_dirs: dirs || '~/projects' }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `HTTP ${res.status}`);
+      }
+      document.getElementById('cfg-host-ssh').value = '';
+      document.getElementById('cfg-host-dirs').value = '';
+      await loadHosts();
+      renderHostRows();
+      await loadProjects();
+    } catch (err) {
+      showError('Could not add host: ' + err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '+ Add host';
+    }
+  }
+
+  async function removeRemoteHost(name) {
+    if (!confirm(`Remove host "${name}"?\n\nIts projects disappear from the list. Sessions running on it keep running, and their history is kept.`)) return;
+    showError(null);
+    try {
+      const res = await fetch('/api/hosts/' + encodeURIComponent(name), { method: 'DELETE' });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      if (data.running_sessions) {
+        showError(`Host "${name}" removed — ${data.running_sessions} session(s) are still running on it.`);
+      }
+      await loadHosts();
+      renderHostRows();
+      await loadProjects();
+    } catch (err) {
+      showError('Could not remove host: ' + err.message);
     }
   }
 

@@ -75,8 +75,15 @@ Supported cron syntax: `*`, `*/n`, `a-b`, `a,b,c` (5-field, local time).
 ## Multiple machines
 
 rcpilot can manage projects on other hosts over ssh — start a session on your
-desktop from your phone, then pick it up at the desk later. Add one `[[hosts]]`
-block per machine:
+desktop from your phone, then pick it up at the desk later.
+
+Add one from **Settings (⚙) → Remote hosts**: enter the hostname (`stardust`, or
+`kjozsa@stardust`) and the directories to scan. rcpilot tests the ssh connection
+before saving and refuses a host it cannot reach, so a typo tells you straight
+away instead of showing up later as a permanently offline chip. Hosts apply
+immediately — no restart.
+
+Or write the config by hand, one `[[hosts]]` block per machine:
 
 ```toml
 [[hosts]]
@@ -91,7 +98,7 @@ whichever machine owns the project. Sessions launch inside a transient
 `systemd-run --user` unit, so they survive the ssh connection closing, an
 rcpilot restart, and a reboot of the box rcpilot runs on.
 
-On each remote host:
+`projects_dir` takes a single path or a list. Preparation on each remote host:
 
 ```bash
 ssh-copy-id kjozsa@stardust      # from the rcpilot machine — must be passwordless

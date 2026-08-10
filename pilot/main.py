@@ -20,6 +20,8 @@ from __future__ import annotations
 import datetime
 import hashlib
 import hmac
+import json
+import re
 import secrets
 import subprocess
 import threading
@@ -328,6 +330,42 @@ def _update_config_toml(updates: dict) -> None:
     path.write_text(''.join(result))
 
 
+def _write_hosts_toml(hosts: list[RemoteHost]) -> None:
+    """Rewrite the ``[[hosts]]`` blocks in config.toml, leaving everything else.
+
+    _update_config_toml only understands ``key = value`` lines, so hosts get
+    their own writer: drop every existing host table, then append the current
+    set. A TOML table runs until the next table header, so cutting from each
+    ``[[hosts]]`` line to the following ``[`` removes exactly one host and
+    nothing that belongs to the top-level config.
+    """
+    path = _get_config_path()
+    lines = path.read_text().splitlines(keepends=True) if path.exists() else []
+
+    kept: list[str] = []
+    in_host = False
+    for line in lines:
+        stripped = line.lstrip()
+        if stripped.startswith("[["):
+            in_host = stripped.startswith("[[hosts]]")
+            if in_host:
+                continue
+        elif stripped.startswith("[") and in_host:
+            in_host = False
+        if not in_host:
+            kept.append(line)
+
+    body = "".join(kept).rstrip("\n")
+    blocks = []
+    for host in hosts:
+        dirs = ", ".join(json.dumps(d) for d in host.projects_dirs)
+        blocks.append(
+            f"\n[[hosts]]\nname = {json.dumps(host.name)}\n"
+            f"ssh = {json.dumps(host.ssh)}\nprojects_dir = [{dirs}]\n"
+        )
+    path.write_text(f"{body}\n" + "".join(blocks))
+
+
 @app.get("/api/config")
 def get_config_values() -> dict:
     """Return current configuration values."""
@@ -396,13 +434,105 @@ def get_projects(sort_by: str = "modified") -> list[dict]:
 
 
 @app.get("/api/hosts")
-def get_hosts() -> list[dict]:
+def get_hosts(probe: bool = True) -> list[dict]:
     """Configured remote hosts and whether each is currently reachable."""
     result = []
     for host in _config.hosts:
-        online, error = host_mgr.check_online(host)
-        result.append({"name": host.name, "ssh": host.ssh, "online": online, "error": error})
+        online, error = host_mgr.check_online(host) if probe else (True, "")
+        result.append({
+            "name": host.name,
+            "ssh": host.ssh,
+            "projects_dirs": list(host.projects_dirs),
+            "online": online,
+            "error": error,
+        })
     return result
+
+
+def _host_from_body(body: dict) -> RemoteHost:
+    """Build a RemoteHost from the settings form, or raise 422 with the reason."""
+    ssh = str(body.get("ssh", "")).strip()
+    if not ssh:
+        raise HTTPException(status_code=422, detail="Hostname is required")
+    # 'kjozsa@stardust' connects as that user but is labelled 'stardust'.
+    name = str(body.get("name", "")).strip() or ssh.rpartition("@")[2]
+    if ":" in name or "/" in name:
+        raise HTTPException(status_code=422, detail="Host name may not contain ':' or '/'")
+
+    raw_dirs = body.get("projects_dirs") or ["~/projects"]
+    if isinstance(raw_dirs, str):
+        raw_dirs = re.split(r"[,\n]", raw_dirs)
+    dirs = tuple(d.strip() for d in raw_dirs if str(d).strip())
+    if not dirs:
+        raise HTTPException(status_code=422, detail="At least one projects directory is required")
+    return RemoteHost(name=name, ssh=ssh, projects_dirs=dirs)
+
+
+def _apply_hosts(hosts: list[RemoteHost]) -> None:
+    """Persist *hosts* and make them live without a restart.
+
+    _config is the same object the watchdog and every route hold, so replacing
+    its host list takes effect immediately — no reason to make the user restart
+    for something that costs nothing to swap in.
+    """
+    _write_hosts_toml(hosts)
+    _config.hosts = hosts
+    project_mgr.invalidate_host_cache()
+
+
+@app.post("/api/hosts")
+def add_host(body: dict = Body(...)) -> dict:
+    """Add a remote host. Rejects one we cannot reach — a host that fails to
+    connect would only show up as a permanently offline chip."""
+    host = _host_from_body(body)
+    if any(h.name == host.name for h in _config.hosts):
+        raise HTTPException(status_code=409, detail=f"Host '{host.name}' already exists")
+
+    online, error = host_mgr.check_online(host)
+    if not online:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Cannot reach {host.ssh} over ssh: {error or 'no response'}. "
+                   "Check the hostname and that key-based ssh works from this machine.",
+        )
+    _apply_hosts([*_config.hosts, host])
+    logger.info("added host {} ({}) dirs={}", host.name, host.ssh, host.projects_dirs)
+    return {"ok": True, "name": host.name}
+
+
+@app.put("/api/hosts/{name}")
+def update_host(name: str, body: dict = Body(...)) -> dict:
+    """Replace an existing host's settings."""
+    if not any(h.name == name for h in _config.hosts):
+        raise HTTPException(status_code=404, detail=f"Host '{name}' not found")
+    host = _host_from_body({**body, "name": body.get("name") or name})
+    if host.name != name and any(h.name == host.name for h in _config.hosts):
+        raise HTTPException(status_code=409, detail=f"Host '{host.name}' already exists")
+
+    online, error = host_mgr.check_online(host)
+    if not online:
+        raise HTTPException(
+            status_code=422, detail=f"Cannot reach {host.ssh} over ssh: {error or 'no response'}"
+        )
+    _apply_hosts([host if h.name == name else h for h in _config.hosts])
+    logger.info("updated host {} -> {} ({})", name, host.name, host.ssh)
+    return {"ok": True, "name": host.name}
+
+
+@app.delete("/api/hosts/{name}")
+def delete_host(name: str) -> dict:
+    """Remove a host. Its projects disappear from the list; sessions running on
+    it are left alone — the DB rows stay so their history survives."""
+    remaining = [h for h in _config.hosts if h.name != name]
+    if len(remaining) == len(_config.hosts):
+        raise HTTPException(status_code=404, detail=f"Host '{name}' not found")
+    running = [
+        r for r in pilot_db.get_all_running_sessions(str(_config.db_path))
+        if host_mgr.split_key(r["project"])[0] == name
+    ]
+    _apply_hosts(remaining)
+    logger.info("removed host {} ({} session(s) left running on it)", name, len(running))
+    return {"ok": True, "running_sessions": len(running)}
 
 
 @app.get("/api/projects/{project}/git-log")
