@@ -43,9 +43,11 @@ def _read_version() -> str:
         from importlib.metadata import version as pkg_version
         return pkg_version("rcpilot")
 
-from pilot.config import Config, load_config
-from pilot.projects import list_projects
+from pilot.config import Config, RemoteHost, load_config
+from pilot.projects import list_all_projects, list_projects
 from pilot import db as pilot_db
+from pilot import hosts as host_mgr
+from pilot import projects as project_mgr
 from pilot import proxy as pilot_proxy
 from pilot import sessions as session_mgr
 from pilot.watchdog import start_watchdog
@@ -390,17 +392,26 @@ def get_ticker() -> dict:
 
 @app.get("/api/projects")
 def get_projects(sort_by: str = "modified") -> list[dict]:
-    return list_projects(_config.projects_dir, sort_by=sort_by)  # type: ignore[return-value]
+    return list_all_projects(_config, sort_by=sort_by)  # type: ignore[return-value]
+
+
+@app.get("/api/hosts")
+def get_hosts() -> list[dict]:
+    """Configured remote hosts and whether each is currently reachable."""
+    result = []
+    for host in _config.hosts:
+        online, error = host_mgr.check_online(host)
+        result.append({"name": host.name, "ssh": host.ssh, "online": online, "error": error})
+    return result
 
 
 @app.get("/api/projects/{project}/git-log")
 def git_log(project: str) -> dict:
-    path = _get_project_path(project)
-    result = subprocess.run(
+    host, path = _resolve_project(project)
+    result = host_mgr.run(
+        host,
         ["git", "log", "--oneline", "--graph", "--decorate", "-50"],
         cwd=path,
-        capture_output=True,
-        text=True,
         timeout=15,
     )
     return {"log": result.stdout}
@@ -408,14 +419,8 @@ def git_log(project: str) -> dict:
 
 @app.get("/api/projects/{project}/git-diff")
 def git_diff(project: str) -> dict:
-    path = _get_project_path(project)
-    result = subprocess.run(
-        ["git", "diff"],
-        cwd=path,
-        capture_output=True,
-        text=True,
-        timeout=15,
-    )
+    host, path = _resolve_project(project)
+    result = host_mgr.run(host, ["git", "diff"], cwd=path, timeout=15)
     return {"diff": result.stdout}
 
 
@@ -424,15 +429,18 @@ def run_claude(
     project: str,
     prompt: str = Body(..., embed=True),
 ) -> dict:
-    """Run ``claude -p <prompt>`` in the project directory and return the output."""
-    path = _get_project_path(project)
-    result = subprocess.run(
+    """Run ``claude -p <prompt>`` in the project directory and return the output.
+
+    Only local runs go through the usage-stats proxy; a remote host talks to
+    Anthropic directly, so its token usage does not show up in the header widget.
+    """
+    host, path = _resolve_project(project)
+    result = host_mgr.run(
+        host,
         ["claude", "-p", "--dangerously-skip-permissions", prompt],
         cwd=path,
-        capture_output=True,
-        text=True,
         timeout=300,
-        env=_subprocess_env(),
+        env=_subprocess_env() if host is None else None,
     )
     return {
         "output": result.stdout.strip(),
@@ -452,13 +460,12 @@ def review_pr(
     launch the claude process detached and return immediately rather than
     waiting up to several minutes for it to finish.
     """
-    path = _get_project_path(project)
-    subprocess.Popen(
+    host, path = _resolve_project(project)
+    host_mgr.detach(
+        host,
         ["claude", "-p", f"/code-review:code-review {pr_number}"],
         cwd=path,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        env=_subprocess_env(),
+        env=_subprocess_env() if host is None else None,
     )
     return {
         "review": f"Review started for PR #{pr_number}. Results will be posted as a comment on the GitHub PR.",
@@ -469,15 +476,11 @@ def review_pr(
 
 @app.post("/api/projects/{project}/git-pull")
 def git_pull(project: str, stash: bool = False) -> dict:
-    path = _get_project_path(project)
+    host, path = _resolve_project(project)
 
     # Check for pending changes
-    status = subprocess.run(
-        ["git", "status", "--porcelain"],
-        cwd=path,
-        capture_output=True,
-        text=True,
-        timeout=10,
+    status = host_mgr.run(
+        host, ["git", "status", "--porcelain"], cwd=path, timeout=10
     )
     has_changes = bool(status.stdout.strip())
 
@@ -486,13 +489,7 @@ def git_pull(project: str, stash: bool = False) -> dict:
 
     stash_applied = False
     if has_changes and stash:
-        stash_result = subprocess.run(
-            ["git", "stash"],
-            cwd=path,
-            capture_output=True,
-            text=True,
-            timeout=15,
-        )
+        stash_result = host_mgr.run(host, ["git", "stash"], cwd=path, timeout=15)
         if stash_result.returncode != 0:
             return {
                 "returncode": stash_result.returncode,
@@ -501,30 +498,15 @@ def git_pull(project: str, stash: bool = False) -> dict:
             }
         stash_applied = True
 
-    result = subprocess.run(
-        ["git", "pull", "--rebase"],
-        cwd=path,
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
+    result = host_mgr.run(host, ["git", "pull", "--rebase"], cwd=path, timeout=30)
     if result.returncode != 0:
         # Abort the rebase to leave the repo in a clean state
-        subprocess.run(
-            ["git", "rebase", "--abort"],
-            cwd=path,
-            capture_output=True,
-            timeout=10,
-        )
+        host_mgr.run(host, ["git", "rebase", "--abort"], cwd=path, timeout=10)
+
+    project_mgr.invalidate_host_cache(host.name if host else "")
 
     if stash_applied:
-        pop_result = subprocess.run(
-            ["git", "stash", "pop"],
-            cwd=path,
-            capture_output=True,
-            text=True,
-            timeout=15,
-        )
+        pop_result = host_mgr.run(host, ["git", "stash", "pop"], cwd=path, timeout=15)
         pop_stdout = pop_result.stdout.strip()
         pop_stderr = pop_result.stderr.strip()
         combined_stdout = "\n".join(filter(None, [result.stdout.strip(), pop_stdout]))
@@ -542,30 +524,14 @@ def git_pull(project: str, stash: bool = False) -> dict:
     }
 
 
-def _accept_claude_trust(project_path: Path) -> None:
+def _accept_claude_trust(project_path: Path | str, host: RemoteHost | None = None) -> None:
     """Write hasTrustDialogAccepted=true into ~/.claude.json for the given project path.
 
     Claude Code asks "Do you trust this folder?" on first open. Without this entry the
-    remote-control session blocks waiting for user input that never arrives.
+    remote-control session blocks waiting for user input that never arrives — on
+    whichever machine the session is being started, hence the host argument.
     """
-    import json
-
-    claude_json = Path.home() / ".claude.json"
-    try:
-        data: dict = json.loads(claude_json.read_text()) if claude_json.exists() else {}
-    except Exception:
-        data = {}
-
-    projects: dict = data.setdefault("projects", {})
-    key = str(project_path.resolve())
-    entry: dict = projects.setdefault(key, {})
-    if not entry.get("hasTrustDialogAccepted"):
-        entry["hasTrustDialogAccepted"] = True
-        try:
-            claude_json.write_text(json.dumps(data, indent=2))
-            logger.info("accepted claude trust for {}", key)
-        except Exception as exc:
-            logger.warning("could not write trust entry to ~/.claude.json: {}", exc)
+    host_mgr.accept_claude_trust(host, str(project_path))
 
 
 def _session_used_bypass(pid: int | None) -> bool:
@@ -591,6 +557,9 @@ def _restart_running_claude_sessions(old_version: str | None = None, new_version
     version skew (EAUTH / stale bridge). Re-spawning puts each session on the new
     version with a fresh, attachable environment URL. The original name and
     permission mode are preserved; imported sessions (no pid) are left untouched.
+
+    Only local sessions are restarted: the updater upgrades claude on this machine
+    only, so a remote session is still happily matched to its own host's version.
     """
     db_path = str(_config.db_path)
     try:
@@ -604,6 +573,8 @@ def _restart_running_claude_sessions(old_version: str | None = None, new_version
     for rec in records:
         if rec.get("imported"):
             continue
+        if host_mgr.split_key(rec["project"])[0]:
+            continue  # lives on another host, whose claude we did not touch
         project = rec["project"]
         path = projects.get(project)
         if not path:
@@ -630,32 +601,49 @@ def _restart_running_claude_sessions(old_version: str | None = None, new_version
     logger.info("restart-on-update: restarted {} session(s) on claude {}", restarted, new_version or "?")
 
 
+def _target_host(host_name: str) -> RemoteHost | None:
+    """Resolve a host name from a request body; '' means the local machine."""
+    host_name = (host_name or "").strip()
+    if not host_name:
+        return None
+    for host in _config.hosts:
+        if host.name == host_name:
+            return host
+    raise HTTPException(status_code=404, detail=f"Host '{host_name}' is not configured")
+
+
 @app.post("/api/projects/import")
 def import_project(
     repo_url: str = Body(..., embed=True),
+    host_name: str = Body("", embed=True),
 ) -> dict:
-    """Clone a GitHub repository into the projects directory."""
+    """Clone a GitHub repository into the projects directory of the target host."""
     import re
-    
+
     # Validate GitHub URL format
     if not repo_url:
         raise HTTPException(status_code=422, detail="Repository URL is required")
-    
+
     # Extract repo name from URL (e.g., https://github.com/user/repo.git -> repo)
     match = re.search(r'/([^/]+?)(\.git)?$', repo_url.rstrip('/'))
     if not match:
         raise HTTPException(status_code=422, detail="Invalid repository URL format")
-    
+
     repo_name = match.group(1)
+    host = _target_host(host_name)
+
+    if host is not None:
+        return _import_project_remote(host, repo_url, repo_name)
+
     target_path = _config.projects_dir / repo_name
-    
+
     # Check if project already exists
     if target_path.exists():
         raise HTTPException(status_code=409, detail=f"Project '{repo_name}' already exists")
-    
+
     # Ensure projects directory exists
     _config.projects_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Clone the repository
     try:
         result = subprocess.run(
@@ -664,7 +652,7 @@ def import_project(
             text=True,
             timeout=120,
         )
-        
+
         if result.returncode != 0:
             # Clean up partial clone if it failed
             if target_path.exists():
@@ -674,7 +662,7 @@ def import_project(
                 status_code=500,
                 detail=f"Git clone failed: {result.stderr.strip() or result.stdout.strip()}"
             )
-        
+
         _accept_claude_trust(target_path)
         logger.info("imported project {} from {}", repo_name, repo_url)
         return {
@@ -697,22 +685,96 @@ def import_project(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def _import_project_remote(host: RemoteHost, repo_url: str, repo_name: str) -> dict:
+    """Clone *repo_url* into the projects dir of *host*, cleaning up on failure."""
+    import shlex
+
+    base = host_mgr.sh_path(host.projects_dir)
+    target = f"{base}/{shlex.quote(repo_name)}"
+    script = f"""
+mkdir -p {base} || exit 1
+if [ -e {target} ]; then printf 'RCPILOT_EXISTS\\n'; exit 0; fi
+if ! out=$(git clone {shlex.quote(repo_url)} {target} 2>&1); then
+  rm -rf {target}
+  printf 'RCPILOT_FAILED %s\\n' "$out"
+  exit 0
+fi
+printf 'RCPILOT_OK %s\\n' "$(cd {target} && pwd)"
+"""
+    try:
+        proc = host_mgr.run_script(host, script, timeout=180)
+    except host_mgr.HostUnreachable as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    out = proc.stdout.strip()
+    if out.startswith("RCPILOT_EXISTS"):
+        raise HTTPException(
+            status_code=409, detail=f"Project '{repo_name}' already exists on {host.name}"
+        )
+    if not out.startswith("RCPILOT_OK"):
+        detail = out[len("RCPILOT_FAILED"):].strip() or proc.stderr.strip() or "unknown error"
+        raise HTTPException(status_code=500, detail=f"Git clone failed on {host.name}: {detail}")
+
+    path = out.split(" ", 1)[1].strip()
+    _accept_claude_trust(path, host)
+    project_mgr.invalidate_host_cache(host.name)
+    logger.info("imported project {} from {} on {}", repo_name, repo_url, host.name)
+    return {
+        "success": True,
+        "project_name": host_mgr.make_key(host.name, repo_name),
+        "message": f"Successfully imported {repo_name} on {host.name}",
+    }
+
+
 @app.post("/api/projects/create")
-def create_project(name: str = Body(..., embed=True)) -> dict:
-    """Create a blank project directory."""
+def create_project(
+    name: str = Body(..., embed=True),
+    host_name: str = Body("", embed=True),
+) -> dict:
+    """Create a blank project directory on the target host."""
     import re
     if not name:
         raise HTTPException(status_code=422, detail="Project name is required")
     if not re.match(r'^[a-zA-Z0-9_\-\.]+$', name):
         raise HTTPException(status_code=422, detail="Invalid project name")
-    target_path = _config.projects_dir / name
-    if target_path.exists():
-        raise HTTPException(status_code=409, detail=f"Project '{name}' already exists")
-    _config.projects_dir.mkdir(parents=True, exist_ok=True)
-    target_path.mkdir()
-    _accept_claude_trust(target_path)
-    logger.info("created blank project {}", name)
-    return {"success": True, "project_name": name}
+    host = _target_host(host_name)
+
+    if host is None:
+        target_path = _config.projects_dir / name
+        if target_path.exists():
+            raise HTTPException(status_code=409, detail=f"Project '{name}' already exists")
+        _config.projects_dir.mkdir(parents=True, exist_ok=True)
+        target_path.mkdir()
+        _accept_claude_trust(target_path)
+        logger.info("created blank project {}", name)
+        return {"success": True, "project_name": name}
+
+    import shlex
+    base = host_mgr.sh_path(host.projects_dir)
+    target = f"{base}/{shlex.quote(name)}"
+    script = f"""
+if [ -e {target} ]; then printf 'RCPILOT_EXISTS\\n'; exit 0; fi
+mkdir -p {target} || exit 1
+printf 'RCPILOT_OK %s\\n' "$(cd {target} && pwd)"
+"""
+    try:
+        proc = host_mgr.run_script(host, script, timeout=20)
+    except host_mgr.HostUnreachable as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+    out = proc.stdout.strip()
+    if out.startswith("RCPILOT_EXISTS"):
+        raise HTTPException(
+            status_code=409, detail=f"Project '{name}' already exists on {host.name}"
+        )
+    if not out.startswith("RCPILOT_OK"):
+        raise HTTPException(
+            status_code=500,
+            detail=f"Could not create '{name}' on {host.name}: {proc.stderr.strip() or 'unknown error'}",
+        )
+    _accept_claude_trust(out.split(" ", 1)[1].strip(), host)
+    project_mgr.invalidate_host_cache(host.name)
+    logger.info("created blank project {} on {}", name, host.name)
+    return {"success": True, "project_name": host_mgr.make_key(host.name, name)}
 
 
 # ---------------------------------------------------------------------------
@@ -720,11 +782,36 @@ def create_project(name: str = Body(..., embed=True)) -> dict:
 # ---------------------------------------------------------------------------
 
 def _get_project_path(project: str) -> str:
-    """Look up a project by name; raise 404 if not found."""
-    projects = {p["name"]: p for p in list_projects(_config.projects_dir)}
-    if project not in projects:
-        raise HTTPException(status_code=404, detail=f"Project '{project}' not found")
-    return projects[project]["path"]
+    """Look up a project by key; raise 404 if not found. Returns its path."""
+    return _resolve_project(project)[1]
+
+
+def _resolve_project(key: str) -> tuple[RemoteHost | None, str]:
+    """Resolve a project key to (owning_host_or_None, path_on_that_host).
+
+    Raises 404 for an unknown project and 502 when the project lives on a host
+    that is currently unreachable — the caller could otherwise act on a stale
+    path or, worse, silently target the wrong machine.
+    """
+    try:
+        host, name = host_mgr.resolve(_config, key)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"Host '{exc.args[0]}' is not configured")
+
+    if host is None:
+        for p in list_projects(_config.projects_dir):
+            if p["name"] == name:
+                return None, p["path"]
+        raise HTTPException(status_code=404, detail=f"Project '{key}' not found")
+
+    try:
+        remote = project_mgr.list_projects_on_host(host)
+    except host_mgr.HostUnreachable as exc:
+        raise HTTPException(status_code=502, detail=f"Host '{host.name}' is unreachable: {exc}")
+    for p in remote:
+        if p["label"] == name:
+            return host, p["path"]
+    raise HTTPException(status_code=404, detail=f"Project '{key}' not found on {host.name}")
 
 
 @app.post("/api/sessions/{project}")
@@ -733,8 +820,8 @@ def start_session(
     name: str = Body("", embed=True),
     yolo: bool = Body(False, embed=True),
 ) -> dict:
-    path = _get_project_path(project)
-    _accept_claude_trust(Path(path))
+    host, path = _resolve_project(project)
+    _accept_claude_trust(path, host)
     ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     db_name = name if name else ts
     claude_name = f"{project} - {db_name}"
@@ -746,6 +833,7 @@ def start_session(
         db_path=str(_config.db_path),
         yolo=yolo,
         permission_mode=_config.permission_mode,
+        host=host,
     )
 
 
@@ -776,7 +864,8 @@ def resume_session(
     session_id: int,
     yolo: bool = Body(False, embed=True),
 ) -> dict:
-    path = _get_project_path(project)
+    host, path = _resolve_project(project)
+    _accept_claude_trust(path, host)
     return session_mgr.resume_session(
         session_id=session_id,
         project=project,
@@ -784,6 +873,7 @@ def resume_session(
         db_path=str(_config.db_path),
         yolo=yolo,
         permission_mode=_config.permission_mode,
+        host=host,
     )
 
 
@@ -831,10 +921,11 @@ def rename_session(
 @app.get("/api/sessions/{project}")
 def get_sessions(project: str) -> dict:
     """Return all live running sessions for *project*."""
-    _get_project_path(project)  # 404 if unknown project
+    host, _ = _resolve_project(project)  # 404 if unknown project
     sessions = session_mgr.list_running_sessions(
         project=project,
         db_path=str(_config.db_path),
+        host=host,
     )
     return {"sessions": sessions}
 
@@ -842,10 +933,11 @@ def get_sessions(project: str) -> dict:
 @app.delete("/api/sessions/{project}/{session_id}")
 def delete_session(project: str, session_id: int) -> dict:
     """Kill a specific session by ID."""
-    _get_project_path(project)  # 404 if unknown project
+    host, _ = _resolve_project(project)  # 404 if unknown project
     return session_mgr.kill_session(
         session_id=session_id,
         db_path=str(_config.db_path),
+        host=host,
     )
 
 

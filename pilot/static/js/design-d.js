@@ -86,6 +86,19 @@
     font-family: inherit;
     flex-shrink: 0;
   }
+  /* Host chip — only rendered for projects that live on another machine */
+  .host-chip {
+    background: var(--cyan-tint);
+    color: var(--cyan);
+    font-size: .64rem;
+    padding: 0 .38rem;
+    border-radius: 4px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    flex-shrink: 0;
+  }
+  .pane-row1 .host-chip { font-size: .6rem; }
+  #active-strip .strip-host { color: var(--cyan); font-size: .66rem; flex-shrink: 0; }
+  #dsheet .ds-head .host { color: var(--cyan); font-size: .72rem; }
   .pane-row2 .pane-sha { flex-shrink: 0; }
   .pane-row2 .pane-age { opacity: .75; flex-shrink: 0; }
   .pane-row2 .pane-tok { margin-left: auto; display: inline-flex; gap: .4rem; flex-shrink: 0; }
@@ -503,7 +516,8 @@
       <div class="project-header" onclick="openSheetD('${encodeURIComponent(project.name)}')">
         <div class="pane-row1">
           <span class="pane-dot ${state}" id="dot-${project.name}"></span>
-          <div class="project-name">${esc(project.name)}</div>
+          <div class="project-name">${esc(project.label || project.name)}</div>
+          ${project.host ? `<span class="host-chip">${esc(project.host)}</span>` : ''}
         </div>
         ${row2Has ? `<div class="pane-row2">
           ${project.git_branch ? `<span class="git-badge">${esc(project.git_branch)}</span>` : (project.has_git ? '<span class="git-badge">git</span>' : '')}
@@ -605,7 +619,8 @@
     const html = `
       <div class="ds-head">
         <span class="prompt">$</span>
-        <span class="name">${esc(name)}</span>
+        <span class="name">${esc(p.label || name)}</span>
+        ${p.host ? `<span class="host">@${esc(p.host)}</span>` : ''}
         ${p.git_branch ? `<span class="branch">${esc(p.git_branch)}</span>` : ''}
         ${p.git_hash ? `<span class="sha">${esc(p.git_hash)}${age ? ' · ' + age : ''}</span>` : ''}
         <button class="x" onclick="closeSheetD()">✕</button>
@@ -794,7 +809,8 @@
     const esc = window.escHtml;
     rows.innerHTML = all.map(({ repo, session }) => `
       <div class="strip-row">
-        <span class="strip-repo">${esc(repo)}</span>
+        <span class="strip-repo">${esc((projectCache[repo] || {}).label || repo)}</span>
+        ${(projectCache[repo] || {}).host ? `<span class="strip-host">@${esc(projectCache[repo].host)}</span>` : ''}
         <span class="strip-name">${esc(session.name || 'unnamed')}</span><button class="strip-rename" onclick="startRunningSessionRename('${esc(repo)}', ${session.id}, this.previousElementSibling)">✎</button>
         ${session.rc_url ? `<a class="strip-attach" href="${esc(session.rc_url)}" target="_blank" rel="noopener">attach ↗</a>` : ''}
         <button class="strip-kill" onclick="killSession('${esc(repo)}', ${session.id})">kill</button>

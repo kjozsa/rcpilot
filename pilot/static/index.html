@@ -1558,6 +1558,7 @@
   </div>
   <div id="header-row2">
     <label class="yolo-label"><input type="checkbox" id="yolo-global" checked> YOLO</label>
+    <span id="host-status" title="Remote hosts that could not be reached"></span>
     <div style="display:flex;gap:.5rem;align-items:center">
       <button class="btn-import" onclick="openImport()" title="Add project"></button>
       <button class="btn-settings" onclick="openSettings()" title="Settings">⚙</button>
@@ -1691,6 +1692,12 @@
     <div id="import-tabs">
       <button class="import-tab active" id="tab-github" onclick="switchImportTab('github')">from GitHub</button>
       <button class="import-tab" id="tab-blank" onclick="switchImportTab('blank')">blank</button>
+    </div>
+    <div id="import-host-row" style="display:none;align-items:center;gap:.5rem;margin-bottom:.6rem">
+      <span style="font-size:.8rem;color:var(--muted)">on host</span>
+      <select id="import-host" style="flex:1;padding:.4rem;border-radius:6px;background:var(--surface2);color:var(--text);border:1px solid var(--border);font-family:inherit">
+        <option value="">this machine</option>
+      </select>
     </div>
     <div id="import-github-form">
       <input type="text" id="import-url" placeholder="https://github.com/user/repo" />
@@ -1865,6 +1872,8 @@
         }
       }
     });
+    loadHosts();
+    setInterval(loadHosts, 60_000);
     loadTicker();
     setInterval(loadTicker, 60_000);
     loadStats();
@@ -1896,6 +1905,42 @@
   function updateSortButtons() {
     document.getElementById('sort-modified').classList.toggle('active', currentSortOrder === 'modified');
     document.getElementById('sort-alpha').classList.toggle('active', currentSortOrder === 'alpha');
+  }
+
+  // ── Remote hosts ───────────────────────────────────────────────────────
+  // Populated from /api/hosts; drives the host picker in "Add project" and the
+  // offline indicator in the header. Empty on a single-machine setup, in which
+  // case none of the host UI is shown at all.
+  window.knownHosts = [];
+
+  async function loadHosts() {
+    try {
+      const res = await fetch('/api/hosts');
+      if (!res.ok) return;
+      window.knownHosts = await res.json();
+    } catch (err) {
+      return;
+    }
+    const offline = window.knownHosts.filter(h => !h.online);
+    const el = document.getElementById('host-status');
+    if (el) {
+      el.textContent = offline.length ? offline.map(h => h.name + ' offline').join(' · ') : '';
+      el.style.cssText = offline.length
+        ? 'font-size:.65rem;color:var(--red);background:var(--red-tint);padding:.15rem .45rem;border-radius:3px'
+        : '';
+      if (offline.length) el.title = offline.map(h => h.name + ': ' + (h.error || 'unreachable')).join('\n');
+    }
+    const row = document.getElementById('import-host-row');
+    const sel = document.getElementById('import-host');
+    if (row && sel && window.knownHosts.length) {
+      const current = sel.value;
+      sel.innerHTML = '<option value="">this machine</option>' +
+        window.knownHosts.map(h =>
+          `<option value="${escHtml(h.name)}"${h.online ? '' : ' disabled'}>${escHtml(h.name)}${h.online ? '' : ' (offline)'}</option>`
+        ).join('');
+      sel.value = current;
+      row.style.display = 'flex';
+    }
   }
 
   async function loadProjects() {
@@ -1933,7 +1978,7 @@
     card.innerHTML = `
       <div class="project-header">
         <div class="project-name">
-          ${escHtml(project.name)}
+          ${escHtml(project.label || project.name)}${project.host ? ` <span class="host-chip">${escHtml(project.host)}</span>` : ''}
           ${project.git_branch ? `<span class="git-badge">${escHtml(project.git_branch)}</span>` : (project.has_git ? '<span class="git-badge">git</span>' : '')}
           ${project.git_hash ? `<span class="git-hash" onclick="showLog('${project.name}')">${escHtml(project.git_hash)}${project.git_commit_time ? ' · ' + fmtAgo(new Date(project.git_commit_time)) : ''} <span class="git-log-icon">≡</span></span>` : ''}
         </div>
@@ -1966,7 +2011,9 @@
     `;
     // Sync ··· button open state for auto-expanded cards
     if (project.has_git && project.git_diff_stat) {
-      const btn = card.querySelector(`#btn-more-${project.name}`);
+      // Matched by attribute, not by `#id`: a remote project's key contains
+      // ':', which is not a valid CSS id selector.
+      const btn = card.querySelector(`[id="btn-more-${project.name}"]`);
       if (btn) btn.classList.add('open');
     }
     return card;
@@ -2010,6 +2057,15 @@
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
+      if (data.warning) {
+        // The bridge started fine but claude.ai refused to create the session,
+        // so attach can only open the directory. The reason is quoted verbatim
+        // from claude.ai — say so, or "re-authorize in settings" sends people
+        // hunting through rcpilot's own settings, which is the wrong place.
+        showError('claude.ai refused to create this session: ' + data.warning +
+          ' — fix this in your claude.ai account settings (not rcpilot). ' +
+          'Attach will open a new, empty session until then.');
+      }
       if (data.rc_url) window.open(data.rc_url, '_blank', 'noopener');
       await refreshStatus(project);
       await loadHistory(project);
@@ -2797,6 +2853,10 @@
     if (_importMode === 'blank') submitCreateBlank(); else submitImport();
   }
 
+  function _selectedImportHost() {
+    return document.getElementById('import-host')?.value || '';
+  }
+
   async function submitCreateBlank() {
     const name = document.getElementById('import-name').value.trim();
     if (!name) { showError('Please enter a project name'); return; }
@@ -2813,7 +2873,7 @@
       const res = await fetch('/api/projects/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name, host_name: _selectedImportHost() }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -2845,7 +2905,7 @@
       const res = await fetch('/api/projects/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ repo_url: url }),
+        body: JSON.stringify({ repo_url: url, host_name: _selectedImportHost() }),
       });
 
       if (!res.ok) {

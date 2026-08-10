@@ -49,10 +49,37 @@ permission_mode = "auto"
 #          localhost <hostname> <ip>
 # ssl_certfile = "~/.config/rcpilot/tls/cert.pem"
 # ssl_keyfile  = "~/.config/rcpilot/tls/key.pem"
+
+# ── Remote hosts (optional) ────────────────────────────────────────────────
+# Manage projects on other machines over ssh. Each host needs passwordless ssh
+# (key-based) from this machine, claude on its PATH, and a systemd user manager
+# that survives logout:  loginctl enable-linger $USER
+#
+# [[hosts]]
+# name = "stardust"           # label shown in the UI; also prefixes project keys
+# ssh = "kjozsa@stardust"     # anything ssh accepts, incl. ~/.ssh/config aliases
+# projects_dir = "~/projects" # path on that machine, or a list of paths
 """
 
 
 DEFAULT_CONFIG_PATH = Path.home() / ".config" / "rcpilot" / "config.toml"
+
+
+@dataclass(frozen=True)
+class RemoteHost:
+    """A machine reachable over ssh whose projects rcpilot also manages."""
+    # Label shown in the UI; also the prefix in project keys ("stardust:rcpilot")
+    name: str
+    # ssh destination — user@host, or an alias from ~/.ssh/config
+    ssh: str
+    # Directories scanned *on that machine*, in order. Kept as strings so ~
+    # expands over there, not here. The first one is where new projects land.
+    projects_dirs: tuple[str, ...] = ("~/projects",)
+
+    @property
+    def projects_dir(self) -> str:
+        """Default directory for newly created or cloned projects."""
+        return self.projects_dirs[0]
 
 
 @dataclass
@@ -83,6 +110,8 @@ class Config:
     # acceptEdits, dontAsk, plan, bypassPermissions. YOLO mode overrides this
     # with bypassPermissions.
     permission_mode: str = "auto"
+    # Remote hosts whose projects are managed alongside the local ones
+    hosts: list[RemoteHost] = field(default_factory=list)
 
 
 def _prompt_first_run() -> tuple[str, int]:
@@ -147,5 +176,51 @@ def load_config(path: Path | None = None) -> Config:
         kwargs["rcpilot_update_mode"] = str(raw["rcpilot_update_mode"]).strip()
     if "permission_mode" in raw:
         kwargs["permission_mode"] = str(raw["permission_mode"]).strip()
+    if "hosts" in raw:
+        kwargs["hosts"] = _parse_hosts(raw["hosts"])
 
     return Config(**kwargs)
+
+
+def _parse_hosts(raw_hosts: object) -> list[RemoteHost]:
+    """Build RemoteHost entries from the ``[[hosts]]`` config array.
+
+    Malformed entries are skipped with a warning rather than failing startup —
+    a typo in one host should not take rcpilot down for every other project.
+    """
+    from loguru import logger
+
+    hosts: list[RemoteHost] = []
+    if not isinstance(raw_hosts, list):
+        logger.warning("config: 'hosts' must be an array of tables — ignoring")
+        return hosts
+    seen: set[str] = set()
+    for entry in raw_hosts:
+        if not isinstance(entry, dict):
+            logger.warning("config: ignoring non-table entry in 'hosts'")
+            continue
+        name = str(entry.get("name", "")).strip()
+        ssh = str(entry.get("ssh", "")).strip()
+        if not name or not ssh:
+            logger.warning("config: host entry needs both 'name' and 'ssh' — ignoring {}", entry)
+            continue
+        # ':' separates host from project in a project key, and '/' would break
+        # the API path segment those keys travel in.
+        if ":" in name or "/" in name:
+            logger.warning("config: host name {!r} may not contain ':' or '/' — ignoring", name)
+            continue
+        if name in seen:
+            logger.warning("config: duplicate host name {!r} — ignoring", name)
+            continue
+        seen.add(name)
+        # projects_dir accepts a single path or a list of them — a machine that
+        # keeps its repos under several roots shouldn't need duplicate entries.
+        raw_dirs = entry.get("projects_dir", entry.get("projects_dirs", "~/projects"))
+        if isinstance(raw_dirs, str):
+            raw_dirs = [raw_dirs]
+        dirs = tuple(str(d).strip() for d in raw_dirs if str(d).strip())
+        if not dirs:
+            logger.warning("config: host {!r} has no usable projects_dir — ignoring", name)
+            continue
+        hosts.append(RemoteHost(name=name, ssh=ssh, projects_dirs=dirs))
+    return hosts

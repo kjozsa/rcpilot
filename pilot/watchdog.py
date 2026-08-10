@@ -6,6 +6,11 @@ and verifies their process is still alive via os.kill(pid, 0).
 If the process is gone, the DB record is updated to 'stopped'.
 
 Records with no pid are marked stopped immediately since they cannot be verified.
+
+Sessions on a remote host are checked with one batched ssh call per host. If the
+host cannot be reached the sweep skips it entirely — an unreachable host means
+"unknown", and marking live sessions stopped over a brief network blip would
+lose the very thing rcpilot exists to keep.
 """
 
 from __future__ import annotations
@@ -17,6 +22,8 @@ from typing import TYPE_CHECKING
 from loguru import logger
 
 import pilot.db as db
+from pilot import hosts as host_mgr
+from pilot import sessions as session_mgr
 
 if TYPE_CHECKING:
     from pilot.config import Config
@@ -44,10 +51,14 @@ def _watchdog_loop(config: "Config", stop_event: threading.Event) -> None:
 
 def _sweep(config: "Config") -> None:
     db_path = str(config.db_path)
-    running = db.get_all_running_sessions(db_path)
+    running = [r for r in db.get_all_running_sessions(db_path) if not r.get("imported")]
+
+    by_host: dict[str, list[dict]] = {}
     for record in running:
-        if record.get("imported"):
-            continue  # imported sessions have no pid — always considered alive
+        host_name, _ = host_mgr.split_key(record["project"])
+        by_host.setdefault(host_name, []).append(record)
+
+    for record in by_host.pop("", []):
         pid = record.get("pid")
         if pid and _pid_alive(pid):
             continue
@@ -57,6 +68,25 @@ def _sweep(config: "Config") -> None:
             record["id"],
         )
         db.mark_session_stopped(db_path, record["id"])
+
+    hosts = {h.name: h for h in config.hosts}
+    for host_name, records in by_host.items():
+        host = hosts.get(host_name)
+        if host is None:
+            # The host was removed from config; its sessions are unverifiable.
+            logger.debug("watchdog: no config for host {!r} — skipping its sessions", host_name)
+            continue
+        status = session_mgr.probe_remote(host, records)
+        if status is None:
+            continue  # unreachable → unknown, not dead
+        for record in records:
+            if status.get(record["id"], {}).get("alive"):
+                continue
+            logger.info(
+                "watchdog: unit {} inactive on {} — marking session {} stopped",
+                record.get("unit"), host_name, record["id"],
+            )
+            db.mark_session_stopped(db_path, record["id"])
 
 
 def start_watchdog(config: "Config") -> tuple[threading.Thread, threading.Event]:

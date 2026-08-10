@@ -31,8 +31,10 @@ CREATE TABLE IF NOT EXISTS sessions (
     started_at    TEXT    NOT NULL,  -- ISO-8601 UTC
     ended_at      TEXT,              -- NULL while still running
     status        TEXT    NOT NULL DEFAULT 'running',
-    rc_url        TEXT,              -- captured Remote-Control URL
-    imported      INTEGER NOT NULL DEFAULT 0  -- 1 if session was imported (started externally)
+    rc_url        TEXT,              -- attach URL: the /session_ deep link when known
+    imported      INTEGER NOT NULL DEFAULT 0, -- 1 if session was imported (started externally)
+    unit          TEXT,              -- systemd unit on a remote host (NULL for local sessions)
+    env_url       TEXT               -- ?environment= URL; opens a NEW session in the same dir
 )
 """
 
@@ -64,6 +66,10 @@ async def init_db(db_path: str) -> None:
             await db.execute("ALTER TABLE sessions ADD COLUMN log_path TEXT")
         if "imported" not in col_names:
             await db.execute("ALTER TABLE sessions ADD COLUMN imported INTEGER NOT NULL DEFAULT 0")
+        if "unit" not in col_names:
+            await db.execute("ALTER TABLE sessions ADD COLUMN unit TEXT")
+        if "env_url" not in col_names:
+            await db.execute("ALTER TABLE sessions ADD COLUMN env_url TEXT")
         await db.commit()
 
 
@@ -89,16 +95,26 @@ def create_session(
     rc_url: str | None,
     log_path: str | None = None,
     imported: bool = False,
+    unit: str | None = None,
+    env_url: str | None = None,
 ) -> int:
     """Insert a new running session row; return its id."""
     with _connect(db_path) as conn:
         cur = conn.execute(
-            "INSERT INTO sessions (project, name, pid, log_path, started_at, status, rc_url, imported) "
-            "VALUES (?, ?, ?, ?, ?, 'running', ?, ?)",
-            (project, name, pid, log_path, _now(), rc_url, 1 if imported else 0),
+            "INSERT INTO sessions "
+            "(project, name, pid, log_path, started_at, status, rc_url, imported, unit, env_url) "
+            "VALUES (?, ?, ?, ?, ?, 'running', ?, ?, ?, ?)",
+            (project, name, pid, log_path, _now(), rc_url, 1 if imported else 0, unit, env_url),
         )
         conn.commit()
         return cur.lastrowid  # type: ignore[return-value]
+
+
+def update_session_url(db_path: str, session_id: int, rc_url: str) -> None:
+    """Point a session at a different attach URL."""
+    with _connect(db_path) as conn:
+        conn.execute("UPDATE sessions SET rc_url = ? WHERE id = ?", (rc_url, session_id))
+        conn.commit()
 
 
 def end_session(

@@ -13,6 +13,7 @@ reconnect to, and manage your coding sessions from anywhere.
 ## Features
 
 - **Session management** — launch, reconnect, kill, and name RC sessions per project; full history with terminal snapshots
+- **Multiple machines** — manage projects and sessions on other hosts over ssh from the same UI
 - **Git integration** — branch status, diff viewer, pull, and Claude-powered commit & push (auto-generates the commit message)
 - **PR review** — trigger a Claude code review on any open GitHub PR; results posted as a PR comment
 - **Usage tracking** — built-in Anthropic API proxy shows live 5h window utilization in the header
@@ -71,11 +72,57 @@ Supported cron syntax: `*`, `*/n`, `a-b`, `a,b,c` (5-field, local time).
 
 ---
 
+## Multiple machines
+
+rcpilot can manage projects on other hosts over ssh — start a session on your
+desktop from your phone, then pick it up at the desk later. Add one `[[hosts]]`
+block per machine:
+
+```toml
+[[hosts]]
+name = "stardust"            # label in the UI; also prefixes project keys
+ssh = "kjozsa@stardust"      # anything ssh accepts, incl. ~/.ssh/config aliases
+projects_dir = "~/projects"  # path on that machine
+```
+
+Their repos join the project list with a host chip next to the name; everything
+else — new session, kill, git pull, commit & push, PR review, history — runs on
+whichever machine owns the project. Sessions launch inside a transient
+`systemd-run --user` unit, so they survive the ssh connection closing, an
+rcpilot restart, and a reboot of the box rcpilot runs on.
+
+On each remote host:
+
+```bash
+ssh-copy-id kjozsa@stardust      # from the rcpilot machine — must be passwordless
+ssh stardust loginctl enable-linger $USER   # keep the user manager alive after logout
+```
+
+`claude` must be on the login-shell PATH there and already authenticated
+(`claude` once, interactively). Projects are keyed as `stardust:myrepo`
+internally; local ones keep their bare names, so existing history is unaffected.
+
+Two caveats worth knowing:
+
+- The usage widget only tracks this machine. Remote `claude -p` calls (commit
+  messages, PR reviews) talk to Anthropic directly rather than through rcpilot's
+  proxy, so their tokens don't appear in the 5h window.
+- The claude auto-updater updates the local CLI only, and restarts local
+  sessions only. Remote hosts update on their own schedule.
+
+If a host is unreachable, its chip in the header says so and its projects drop
+out of the list — local projects and any other host stay fully usable. Running
+sessions on an unreachable host are **never** marked stopped; a network blip
+must not garbage-collect live work.
+
+---
+
 ## Requirements
 
 - Python 3.11+
 - `claude` — Claude Code CLI, on `PATH` and authenticated
 - `gh` — GitHub CLI, only needed for PR review
+- `ssh` with key-based auth, only needed for remote hosts
 
 ---
 
