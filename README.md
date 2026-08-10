@@ -83,6 +83,10 @@ before saving and refuses a host it cannot reach, so a typo tells you straight
 away instead of showing up later as a permanently offline chip. Hosts apply
 immediately — no restart.
 
+**edit** loads a host back into the form to change its hostname or directories;
+adding the same host twice is rejected rather than merged, so a directory you
+meant to drop cannot survive by accident.
+
 Or write the config by hand, one `[[hosts]]` block per machine:
 
 ```toml

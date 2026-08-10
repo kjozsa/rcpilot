@@ -1418,12 +1418,22 @@
       color: var(--muted); font-size: .72rem; flex: 1 1 auto; min-width: 0;
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
-    .cfg-host-row .rm {
+    .cfg-host-row .rm, .cfg-host-row .ed {
       background: var(--red-tint); color: var(--red); cursor: pointer;
       border: 1px solid color-mix(in srgb, var(--red) 35%, transparent);
       border-radius: 6px; padding: .15rem .5rem; font-size: .7rem; font-family: inherit;
       flex-shrink: 0;
     }
+    .cfg-host-row .ed {
+      background: var(--surface); color: var(--muted); border-color: var(--border);
+    }
+    .cfg-host-row .ed:hover { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+    .cfg-host-row.editing { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--surface2)); }
+    #cfg-host-cancel {
+      background: none; border: none; color: var(--muted); cursor: pointer;
+      font-family: inherit; font-size: .72rem; padding: .45rem .2rem; flex-shrink: 0;
+    }
+    #cfg-host-cancel[hidden] { display: none; }
     #cfg-host-form { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .35rem; }
     #cfg-host-form .settings-input { flex: 1 1 45%; min-width: 0; margin: 0; }
     #cfg-host-add {
@@ -1790,7 +1800,8 @@
       <div id="cfg-host-form">
         <input type="text" id="cfg-host-ssh" class="settings-input" placeholder="stardust  (or kjozsa@stardust)" />
         <input type="text" id="cfg-host-dirs" class="settings-input" placeholder="~/projects, ~/work/repos" />
-        <button id="cfg-host-add" onclick="addRemoteHost()">+ Add host</button>
+        <button id="cfg-host-add" onclick="submitRemoteHost()">+ Add host</button>
+        <button id="cfg-host-cancel" onclick="cancelHostEdit()" hidden>cancel</button>
       </div>
       <span class="settings-hint">Manage projects on another machine over ssh. Needs key-based ssh
         from here and a systemd user manager there (<code>loginctl enable-linger</code>).
@@ -2989,6 +3000,7 @@
       document.getElementById('cfg-rcpilot-update-mode').value  = cfg.rcpilot_update_mode || 'prompt';
       document.getElementById('cfg-permission-mode').value      = cfg.permission_mode || 'auto';
       // Draw from the cached probe so the sheet opens instantly, then refresh.
+      cancelHostEdit();  // never reopen mid-edit with a stale host loaded
       renderHostRows();
       loadHosts().then(renderHostRows);
     } catch (err) {
@@ -3003,31 +3015,59 @@
   // Host changes save immediately rather than on the Save button: they take
   // effect without a restart, and mixing them into the restart-required fields
   // would make people restart for nothing.
+  // Name of the host being edited, or null when the form adds a new one.
+  let _editingHost = null;
+
   function renderHostRows() {
     const list = document.getElementById('cfg-hosts-list');
     if (!list) return;
     list.innerHTML = (window.knownHosts || []).map(h => `
-      <div class="cfg-host-row">
+      <div class="cfg-host-row${h.name === _editingHost ? ' editing' : ''}">
         <span class="dot ${h.online ? '' : 'off'}" title="${h.online ? 'reachable' : escHtml(h.error || 'unreachable')}"></span>
         <span class="who">${escHtml(h.name)}</span>
         <span class="dirs">${escHtml((h.projects_dirs || []).join('  '))}</span>
+        <button class="ed" data-host="${escHtml(h.name)}">edit</button>
         <button class="rm" data-host="${escHtml(h.name)}">remove</button>
       </div>`).join('');
+    list.querySelectorAll('.ed').forEach(b =>
+      b.addEventListener('click', () => startHostEdit(b.dataset.host)));
     list.querySelectorAll('.rm').forEach(b =>
       b.addEventListener('click', () => removeRemoteHost(b.dataset.host)));
   }
 
-  async function addRemoteHost() {
+  function startHostEdit(name) {
+    const host = (window.knownHosts || []).find(h => h.name === name);
+    if (!host) return;
+    _editingHost = name;
+    document.getElementById('cfg-host-ssh').value = host.ssh || '';
+    document.getElementById('cfg-host-dirs').value = (host.projects_dirs || []).join(', ');
+    document.getElementById('cfg-host-add').textContent = 'Save host';
+    document.getElementById('cfg-host-cancel').hidden = false;
+    renderHostRows();
+    document.getElementById('cfg-host-dirs').focus();
+  }
+
+  function cancelHostEdit() {
+    _editingHost = null;
+    document.getElementById('cfg-host-ssh').value = '';
+    document.getElementById('cfg-host-dirs').value = '';
+    document.getElementById('cfg-host-add').textContent = '+ Add host';
+    document.getElementById('cfg-host-cancel').hidden = true;
+    renderHostRows();
+  }
+
+  async function submitRemoteHost() {
     const ssh = document.getElementById('cfg-host-ssh').value.trim();
     const dirs = document.getElementById('cfg-host-dirs').value.trim();
     if (!ssh) { showError('Enter a hostname, e.g. stardust or kjozsa@stardust'); return; }
+    const editing = _editingHost;
     const btn = document.getElementById('cfg-host-add');
     btn.disabled = true;
     btn.textContent = 'Connecting…';
     showError(null);
     try {
-      const res = await fetch('/api/hosts', {
-        method: 'POST',
+      const res = await fetch(editing ? '/api/hosts/' + encodeURIComponent(editing) : '/api/hosts', {
+        method: editing ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ssh, projects_dirs: dirs || '~/projects' }),
       });
@@ -3035,21 +3075,22 @@
         const err = await res.json().catch(() => ({}));
         throw new Error(err.detail || `HTTP ${res.status}`);
       }
-      document.getElementById('cfg-host-ssh').value = '';
-      document.getElementById('cfg-host-dirs').value = '';
+      cancelHostEdit();
       await loadHosts();
       renderHostRows();
       await loadProjects();
     } catch (err) {
-      showError('Could not add host: ' + err.message);
-    } finally {
+      showError((editing ? 'Could not save host: ' : 'Could not add host: ') + err.message);
       btn.disabled = false;
-      btn.textContent = '+ Add host';
+      btn.textContent = editing ? 'Save host' : '+ Add host';
+      return;
     }
+    btn.disabled = false;
   }
 
   async function removeRemoteHost(name) {
     if (!confirm(`Remove host "${name}"?\n\nIts projects disappear from the list. Sessions running on it keep running, and their history is kept.`)) return;
+    if (_editingHost === name) cancelHostEdit();
     showError(null);
     try {
       const res = await fetch('/api/hosts/' + encodeURIComponent(name), { method: 'DELETE' });

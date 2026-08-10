@@ -486,7 +486,12 @@ def add_host(body: dict = Body(...)) -> dict:
     connect would only show up as a permanently offline chip."""
     host = _host_from_body(body)
     if any(h.name == host.name for h in _config.hosts):
-        raise HTTPException(status_code=409, detail=f"Host '{host.name}' already exists")
+        # Adding the same host twice does not merge directories — that would
+        # silently keep dirs someone meant to drop. Point at edit instead.
+        raise HTTPException(
+            status_code=409,
+            detail=f"Host '{host.name}' already exists — use edit to change its directories",
+        )
 
     online, error = host_mgr.check_online(host)
     if not online:
