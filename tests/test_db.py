@@ -135,3 +135,33 @@ def test_get_all_running_sessions_cross_project(db: str) -> None:
     running = get_all_running_sessions(db)
     projects = {r["project"] for r in running}
     assert projects == {"alpha", "beta"}
+
+
+def test_end_session_caps_snapshot_to_tail(db: str) -> None:
+    """An oversized snapshot is stored as its last SNAPSHOT_MAX_CHARS characters."""
+    import sqlite3
+
+    from pilot.db import SNAPSHOT_MAX_CHARS
+
+    sid = create_session(db, "proj", "s", None, None)
+    end_session(db, sid, "stopped", pane_snapshot="a" * 10 + "b" * SNAPSHOT_MAX_CHARS)
+    (content,) = sqlite3.connect(db).execute("SELECT content FROM session_logs").fetchone()
+    assert content == "b" * SNAPSHOT_MAX_CHARS
+
+
+def test_init_db_trims_existing_oversized_snapshots(db: str) -> None:
+    """Snapshots stored before the cap existed are trimmed to the tail on startup."""
+    import sqlite3
+
+    from pilot.db import SNAPSHOT_MAX_CHARS
+
+    sid = create_session(db, "proj", "s", None, None)
+    with sqlite3.connect(db) as conn:
+        conn.execute(
+            "INSERT INTO session_logs (session_id, recorded_at, role, content) "
+            "VALUES (?, 'x', 'snapshot', ?)",
+            (sid, "a" * 10 + "b" * SNAPSHOT_MAX_CHARS),
+        )
+    asyncio.run(init_db(db))
+    (content,) = sqlite3.connect(db).execute("SELECT content FROM session_logs").fetchone()
+    assert content == "b" * SNAPSHOT_MAX_CHARS

@@ -48,6 +48,12 @@ CREATE TABLE IF NOT EXISTS session_logs (
 )
 """
 
+# A snapshot is the raw `script` log of a whole session, which a long verbose
+# session grows to hundreds of MB. Only the tail is ever worth reading back, so
+# keep at most this many characters of it (2026-10-03: uncapped snapshots grew
+# pilot.db to 1.9 GB and helped fill the rpi4 root disk).
+SNAPSHOT_MAX_CHARS = 256_000
+
 
 # ---------------------------------------------------------------------------
 # Async init — called once at startup
@@ -70,7 +76,16 @@ async def init_db(db_path: str) -> None:
             await db.execute("ALTER TABLE sessions ADD COLUMN unit TEXT")
         if "env_url" not in col_names:
             await db.execute("ALTER TABLE sessions ADD COLUMN env_url TEXT")
+        cur = await db.execute(
+            "UPDATE session_logs SET content = substr(content, -?) "
+            "WHERE role = 'snapshot' AND length(content) > ?",
+            (SNAPSHOT_MAX_CHARS, SNAPSHOT_MAX_CHARS),
+        )
+        trimmed = cur.rowcount
         await db.commit()
+        if trimmed > 0:
+            # Give the space freed by trimming oversized snapshots back to the disk.
+            await db.execute("VACUUM")
 
 
 # ---------------------------------------------------------------------------
@@ -134,7 +149,7 @@ def end_session(
             conn.execute(
                 "INSERT INTO session_logs (session_id, recorded_at, role, content) "
                 "VALUES (?, ?, 'snapshot', ?)",
-                (session_id, ended_at, pane_snapshot),
+                (session_id, ended_at, pane_snapshot[-SNAPSHOT_MAX_CHARS:]),
             )
         conn.commit()
 

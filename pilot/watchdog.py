@@ -11,12 +11,18 @@ Sessions on a remote host are checked with one batched ssh call per host. If the
 host cannot be reached the sweep skips it entirely — an unreachable host means
 "unknown", and marking live sessions stopped over a brief network blip would
 lose the very thing rcpilot exists to keep.
+
+Once an hour the sweep also deletes local session-*.log / session-*.debug files
+older than LOG_RETENTION_DAYS. `script` logs of verbose sessions run to hundreds
+of MB each and were never removed, which helped fill the rpi4 root disk.
 """
 
 from __future__ import annotations
 
 import os
 import threading
+import time
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from loguru import logger
@@ -29,6 +35,8 @@ if TYPE_CHECKING:
     from pilot.config import Config
 
 POLL_INTERVAL: float = 10.0  # seconds between watchdog sweeps
+PRUNE_INTERVAL: float = 3600.0  # seconds between session-log prunes
+LOG_RETENTION_DAYS: int = 14  # session log files untouched this long are deleted
 
 
 def _pid_alive(pid: int) -> bool:
@@ -41,11 +49,18 @@ def _pid_alive(pid: int) -> bool:
 
 def _watchdog_loop(config: "Config", stop_event: threading.Event) -> None:
     logger.info("watchdog started (poll interval {}s)", POLL_INTERVAL)
+    last_prune = 0.0
     while not stop_event.wait(timeout=POLL_INTERVAL):
         try:
             _sweep(config)
         except Exception:
             logger.exception("watchdog sweep failed")
+        if time.monotonic() - last_prune >= PRUNE_INTERVAL:
+            last_prune = time.monotonic()
+            try:
+                _prune_session_logs(config)
+            except Exception:
+                logger.exception("watchdog log prune failed")
     logger.info("watchdog stopped")
 
 
@@ -87,6 +102,35 @@ def _sweep(config: "Config") -> None:
                 record.get("unit"), host_name, record["id"],
             )
             db.mark_session_stopped(db_path, record["id"])
+
+
+def _prune_session_logs(config: "Config", now: float | None = None) -> int:
+    """Delete stale local session log/debug files; return how many were removed.
+
+    Files of sessions still marked running are kept regardless of age — an idle
+    session's log can go untouched for days and is still its attach source.
+    """
+    db_path = str(config.db_path)
+    keep: set[Path] = set()
+    for record in db.get_all_running_sessions(db_path):
+        if record.get("log_path"):
+            log = Path(record["log_path"])
+            keep.update({log, log.with_suffix(".debug")})
+    cutoff = (now if now is not None else time.time()) - LOG_RETENTION_DAYS * 86400
+    removed = 0
+    log_dir = config.db_path.parent
+    for path in [*log_dir.glob("session-*.log"), *log_dir.glob("session-*.debug")]:
+        if path in keep:
+            continue
+        try:
+            if path.stat().st_mtime < cutoff:
+                path.unlink()
+                removed += 1
+        except FileNotFoundError:
+            pass
+    if removed:
+        logger.info("watchdog: pruned {} session log files older than {}d", removed, LOG_RETENTION_DAYS)
+    return removed
 
 
 def start_watchdog(config: "Config") -> tuple[threading.Thread, threading.Event]:

@@ -58,3 +58,29 @@ def test_start_watchdog_thread_is_daemon(cfg: Config, monkeypatch: pytest.Monkey
     assert thread.daemon is True
     stop_event.set()
     thread.join(timeout=2)
+
+
+def test_prune_deletes_stale_logs_but_keeps_running_and_fresh(cfg: Config) -> None:
+    """Old session logs are pruned; fresh ones and a running session's files stay."""
+    import os
+    import time
+
+    from pilot.watchdog import LOG_RETENTION_DAYS, _prune_session_logs
+
+    log_dir = cfg.db_path.parent
+    old = time.time() - (LOG_RETENTION_DAYS + 1) * 86400
+    stale_log, stale_debug = log_dir / "session-aaa.log", log_dir / "session-aaa.debug"
+    running_log, running_debug = log_dir / "session-bbb.log", log_dir / "session-bbb.debug"
+    fresh_log = log_dir / "session-ccc.log"
+    other = log_dir / "bridge-transcript-x.jsonl"
+    for p in (stale_log, stale_debug, running_log, running_debug, fresh_log, other):
+        p.write_text("x")
+    for p in (stale_log, stale_debug, running_log, running_debug, other):
+        os.utime(p, (old, old))
+    create_session(str(cfg.db_path), "my-project", "test", 1, None, log_path=str(running_log))
+
+    assert _prune_session_logs(cfg) == 2
+
+    assert not stale_log.exists() and not stale_debug.exists()
+    assert running_log.exists() and running_debug.exists()
+    assert fresh_log.exists() and other.exists()
