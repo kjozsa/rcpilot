@@ -11,7 +11,8 @@ Flow (local host):
            → poll log file until RC URL appears
            → store pid + log_path + url in DB
   list   → check os.kill(pid, 0) for each running DB record
-  kill   → SIGTERM the script process group (kills script + claude together)
+  kill   → SIGTERM the script process tree (script + claude + its sessions),
+             wait for it to exit (SIGKILL after a grace period)
            → read log file for snapshot
 
 Sessions on a remote host follow the same shape with systemd standing in for the
@@ -33,7 +34,7 @@ import subprocess
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Callable
 
 from loguru import logger
 
@@ -66,6 +67,16 @@ _ANSI_ESCAPE = re.compile(r"\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
 _URL_WAIT_SECONDS = 60
 _POLL_INTERVAL = 0.3
 
+# Seconds a killed session gets to exit after SIGTERM before it is SIGKILLed.
+# Waiting matters: claude allows one bridge per folder, so a respawn that races
+# the old bridge's exit dies with "This folder is already served".
+_KILL_GRACE_SECONDS = 10.0
+
+# What claude prints when another bridge already owns the folder. It then lingers
+# for about a minute ("Exiting in about 60 seconds.") instead of exiting, so the
+# message itself — not the process exit — is what ends the wait.
+_ALREADY_SERVED = "already served by a terminal `claude remote-control`"
+
 
 def _extract_urls(text: str) -> tuple[str | None, str | None]:
     """Pull the (session, environment) URLs out of captured terminal output.
@@ -91,8 +102,19 @@ def _strip_ansi(text: str) -> str:
     return _ANSI_ESCAPE.sub("", text)
 
 
+def _exit_reason(log_text: str) -> str:
+    """Why the bridge died before printing a URL: its last `Error:` line, if any."""
+    errors = re.findall(r"^Error:\s*(.+)$", log_text, re.MULTILINE)
+    if errors:
+        return errors[-1].strip()
+    return "claude remote-control exited before printing a session URL"
+
+
 def _poll_log_for_url(
-    log_path: Path, timeout: float, debug_path: Path | None = None
+    log_path: Path,
+    timeout: float,
+    debug_path: Path | None = None,
+    exited: Callable[[], bool] | None = None,
 ) -> tuple[str | None, str | None, str | None, str]:
     """
     Poll *log_path* until the session deep link appears or *timeout* elapses.
@@ -100,7 +122,9 @@ def _poll_log_for_url(
 
     Also watches the bridge's debug file: when claude.ai refuses to create the
     session there is nothing left to wait for, and burning the full minute makes
-    the UI look hung when the answer is already known.
+    the UI look hung when the answer is already known. Likewise *exited*: once
+    the process is gone ("folder already served", claude not on PATH, …) no URL
+    is coming, and the log's last error line is the answer.
     """
     deadline = time.monotonic() + timeout
     clean = ""
@@ -110,6 +134,16 @@ def _poll_log_for_url(
             session_url, env_url = _extract_urls(clean)
             if session_url:
                 return session_url, env_url, None, clean
+            if _ALREADY_SERVED in clean:
+                return None, None, _exit_reason(clean), clean
+        if exited is not None and exited():
+            # The exit may have raced the final flush; take one last look.
+            if log_path.exists():
+                clean = _strip_ansi(log_path.read_text(errors="replace"))
+            session_url, env_url = _extract_urls(clean)
+            if session_url:
+                return session_url, env_url, None, clean
+            return None, None, _exit_reason(clean), clean
         if debug_path is not None and debug_path.exists():
             reason = _spawn_failure_reason(debug_path.read_text(errors="replace"))
             if reason:
@@ -122,6 +156,144 @@ def _poll_log_for_url(
     if log_path.exists():
         clean = _strip_ansi(log_path.read_text(errors="replace"))
     return (None, _extract_urls(clean)[1], None, clean)
+
+
+def _spawn_env() -> dict[str, str]:
+    """Env for the `script` spawn: the service env with ~/.local/bin on PATH.
+
+    systemd hands user services a stripped PATH that omits ~/.local/bin, so the
+    `claude` installed there is only reachable if the user's login shell happens
+    to add it back. On a host where it doesn't, every session start dies as
+    `Unknown command: claude` (exit 127) and surfaces as a bare start timeout.
+
+    ANTHROPIC_BASE_URL is deliberately left untouched here — see start_session.
+    """
+    env = os.environ.copy()
+    local_bin = str(Path.home() / ".local" / "bin")
+    path = env.get("PATH", "")
+    if local_bin not in path.split(":"):
+        env["PATH"] = f"{local_bin}:{path}" if path else local_bin
+    return env
+
+
+def _proc_stat(pid: int) -> tuple[str, int, int] | None:
+    """(state, ppid, pgrp) of *pid* from /proc, or None if it is gone."""
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text()
+    except OSError:
+        return None
+    # comm (field 2) is parenthesised and may itself contain spaces or ')'.
+    fields = stat[stat.rindex(")") + 2:].split()
+    return fields[0], int(fields[1]), int(fields[2])
+
+
+def _descendants(pid: int) -> list[int]:
+    """All live descendants of *pid*, found by walking /proc parent links."""
+    children: dict[int, list[int]] = {}
+    for entry in os.scandir("/proc"):
+        if entry.name.isdigit():
+            stat = _proc_stat(int(entry.name))
+            if stat:
+                children.setdefault(stat[1], []).append(int(entry.name))
+    found, todo = [], [pid]
+    while todo:
+        for child in children.get(todo.pop(), []):
+            found.append(child)
+            todo.append(child)
+    return found
+
+
+def _reap(pid: int) -> None:
+    """Collect *pid*'s exit status if it is our child, so it leaves no zombie."""
+    try:
+        os.waitpid(pid, os.WNOHANG)
+    except ChildProcessError:
+        pass
+
+
+def _terminate(pid: int, grace: float = _KILL_GRACE_SECONDS) -> None:
+    """SIGTERM *pid* and its whole process tree, wait for it, then SIGKILL.
+
+    The tree, not the process group: `script` runs claude in a session of its
+    own on the pty, so signalling script's group leaves claude to die later of
+    SIGHUP — after a restart has already tried to respawn in the same folder.
+    Returns only once everything is gone or has been SIGKILLed.
+    """
+    targets = [pid, *_descendants(pid)]
+
+    def alive() -> list[int]:
+        _reap(pid)
+        return [t for t in targets if (st := _proc_stat(t)) is not None and st[0] != "Z"]
+
+    def send(sig: signal.Signals, pids: list[int]) -> None:
+        for t in pids:
+            try:
+                os.kill(t, sig)
+            except ProcessLookupError:
+                pass
+
+    send(signal.SIGTERM, targets)
+    deadline = time.monotonic() + grace
+    while time.monotonic() < deadline:
+        if not alive():
+            return
+        time.sleep(0.2)
+    left = alive()
+    if left:
+        logger.warning("pids {} still alive {}s after SIGTERM; sending SIGKILL", left, grace)
+        send(signal.SIGKILL, left)
+
+
+def bridge_holders(project_path: str) -> list[dict[str, Any]]:
+    """Local `claude remote-control` processes serving *project_path*.
+
+    claude refuses to start a second bridge in a folder, so anything listed here
+    blocks a new session. Each entry is {pid, name, ancestors}: the bridge's own
+    pid, its --name, and the pids above it (rcpilot records the `script` pid
+    there, two levels up).
+    """
+    target = os.path.realpath(project_path)
+    holders = []
+    for entry in os.scandir("/proc"):
+        if not entry.name.isdigit():
+            continue
+        pid = int(entry.name)
+        try:
+            argv = [a.decode(errors="replace") for a in
+                    Path(f"/proc/{pid}/cmdline").read_bytes().split(b"\0")]
+            if len(argv) < 2 or os.path.basename(argv[0]) != "claude" or argv[1] != "remote-control":
+                continue
+            if os.path.realpath(f"/proc/{pid}/cwd") != target:
+                continue
+        except OSError:
+            continue
+        name = argv[argv.index("--name") + 1] if "--name" in argv[:-1] else ""
+        ancestors, cur = [], pid
+        for _ in range(4):
+            stat = _proc_stat(cur)
+            if not stat or stat[1] <= 1:
+                break
+            cur = stat[1]
+            ancestors.append(cur)
+        holders.append({"pid": pid, "name": name, "ancestors": ancestors})
+    return holders
+
+
+def release_bridge(project_path: str, pid: int) -> bool:
+    """Stop the stray bridge *pid* serving *project_path*.
+
+    Only a pid that is verifiably a remote-control bridge in that folder is
+    touched, so a stale or forged request cannot be used to kill anything else.
+    Returns False if *pid* is not such a bridge (already gone, or never was).
+    """
+    if not any(h["pid"] == pid for h in bridge_holders(project_path)):
+        return False
+    logger.info("release_bridge: stopping stray bridge pid={} in {}", pid, project_path)
+    # The bridge and its sessions, not its group: one started by hand in a
+    # terminal shares a group with that shell. A `script` wrapper above it exits
+    # on its own once its child is gone.
+    _terminate(pid)
+    return True
 
 
 def _bridge_pointer_relpath(project_path: str) -> str:
@@ -207,9 +379,10 @@ def start_session(
     NOTE: remote-control sessions must NOT set ANTHROPIC_BASE_URL. As of claude
     2.1.x, `claude remote-control` refuses to start ("Remote Control is only
     available when using Claude via api.anthropic.com.") unless the base URL is
-    unset or its host is exactly api.anthropic.com. So we let the session inherit
-    the service env and talk to Anthropic directly — the usage-stats proxy only
-    sits in front of the non-interactive `claude -p` calls.
+    unset or its host is exactly api.anthropic.com. So the session inherits the
+    service env (see _spawn_env, which only widens PATH) and talks to Anthropic
+    directly — the usage-stats proxy only sits in front of the non-interactive
+    `claude -p` calls.
     """
     if host is not None:
         return _start_remote_session(
@@ -237,7 +410,7 @@ def start_session(
     proc = subprocess.Popen(
         cmd,
         cwd=project_path,
-        env=None,
+        env=_spawn_env(),
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
@@ -246,19 +419,37 @@ def start_session(
     logger.info("spawned script pid={}", proc.pid)
 
     session_url, env_url, failure, output = _poll_log_for_url(
-        log_path, _URL_WAIT_SECONDS, debug_path
+        log_path, _URL_WAIT_SECONDS, debug_path,
+        exited=lambda: proc.poll() is not None,
     )
     url = session_url or env_url
 
-    sid = db.create_session(
-        db_path, project, db_name, proc.pid, url,
-        log_path=str(log_path), env_url=env_url,
-    )
+    try:
+        sid = db.create_session(
+            db_path, project, db_name, proc.pid, url,
+            log_path=str(log_path), env_url=env_url,
+        )
+    except Exception:
+        # A bridge we cannot record is one nobody can see or stop — and it holds
+        # the folder, so every later start there fails. Take it down with us.
+        logger.exception("start_session: could not record session; stopping pid {}", proc.pid)
+        _terminate(proc.pid)
+        raise
 
     if url is None:
-        logger.warning("timed out waiting for RC URL. Log:\n{}", output.strip() or "(empty)")
+        # Whatever is still running never produced a URL; leaving it up would
+        # orphan a bridge that blocks the folder.
+        _terminate(proc.pid)
+        error = failure or f"no session URL within {_URL_WAIT_SECONDS}s"
+        logger.warning("session start failed ({}). Log:\n{}", error, output.strip() or "(empty)")
         db.end_session(db_path, sid, "timed_out", output or None)
-        return {"status": "timed_out", "rc_url": None, "session_id": sid, "name": db_name}
+        result: dict[str, Any] = {
+            "status": "timed_out", "rc_url": None, "session_id": sid,
+            "name": db_name, "error": error,
+        }
+        if _ALREADY_SERVED in error:
+            result["holder"] = _describe_holder(project_path, project, db_path)
+        return result
 
     warning = failure
     if session_url is None:
@@ -271,6 +462,25 @@ def start_session(
     return {
         "status": "running", "rc_url": url, "session_id": sid,
         "name": db_name, "warning": warning,
+    }
+
+
+def _describe_holder(project_path: str, project: str, db_path: str) -> dict[str, Any] | None:
+    """Who is serving *project_path*, for the "folder already served" error.
+
+    `tracked` says whether rcpilot knows the bridge (a running session of this
+    project); an untracked one is a stray the UI can offer to stop.
+    """
+    holders = bridge_holders(project_path)
+    if not holders:
+        return None
+    holder = holders[0]
+    running = {r["pid"]: r for r in db.list_running_sessions(db_path, project) if r.get("pid")}
+    owner = next((running[a] for a in [holder["pid"], *holder["ancestors"]] if a in running), None)
+    return {
+        "pid": holder["pid"],
+        "name": owner["name"] if owner else holder["name"],
+        "tracked": owner is not None,
     }
 
 
@@ -579,7 +789,7 @@ def kill_session(
     session_id: int, db_path: str, host: "RemoteHost | None" = None
 ) -> dict[str, Any]:
     """
-    Terminate a session by SIGTERMing the script process group — or, for a
+    Terminate a session by SIGTERMing the script process tree — or, for a
     session on a remote host, by stopping its systemd unit.
     Reads the log file for a snapshot before cleaning up.
     Imported sessions have no pid; they are just marked stopped.
@@ -597,13 +807,9 @@ def kill_session(
         snapshot = _kill_remote(host, record)
     else:
         if pid and _pid_alive(pid):
-            try:
-                # Kill the entire process group (script + claude child)
-                os.killpg(os.getpgid(pid), signal.SIGTERM)
-                # Give it a moment to flush the log
-                time.sleep(0.5)
-            except OSError:
-                pass
+            # Kill script + claude and wait them out: a restart respawns in the
+            # same folder straight after this.
+            _terminate(pid)
 
         if log_path_str:
             log_path = Path(log_path_str)

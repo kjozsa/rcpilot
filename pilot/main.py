@@ -972,6 +972,21 @@ def start_session(
     )
 
 
+@app.post("/api/sessions/{project}/release")
+def release_bridge(project: str, pid: int = Body(..., embed=True)) -> dict:
+    """Stop a stray `claude remote-control` that holds a local project's folder.
+
+    claude allows one bridge per folder, so an untracked one (left behind by a
+    crash, or started by hand) blocks every new session there.
+    """
+    host, path = _resolve_project(project)
+    if host is not None:
+        raise HTTPException(status_code=400, detail="Only local bridges can be released")
+    if not session_mgr.release_bridge(str(path), pid):
+        raise HTTPException(status_code=404, detail=f"No remote-control bridge with pid {pid} serves {project}")
+    return {"status": "released"}
+
+
 @app.post("/api/sessions/{project}/import")
 def import_session(
     project: str,
