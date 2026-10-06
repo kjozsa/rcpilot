@@ -158,13 +158,14 @@ def _poll_log_for_url(
     return (None, _extract_urls(clean)[1], None, clean)
 
 
-def _spawn_env() -> dict[str, str]:
-    """Env for the `script` spawn: the service env with ~/.local/bin on PATH.
+def local_bin_env() -> dict[str, str]:
+    """The service env with ~/.local/bin on PATH, for anything that runs claude.
 
     systemd hands user services a stripped PATH that omits ~/.local/bin, so the
-    `claude` installed there is only reachable if the user's login shell happens
-    to add it back. On a host where it doesn't, every session start dies as
-    `Unknown command: claude` (exit 127) and surfaces as a bare start timeout.
+    `claude` installed there is only reachable if something adds it back. A
+    session spawn gets it from the user's login shell only if that shell happens
+    to add it (otherwise: `Unknown command: claude`, exit 127); a bare
+    `claude -p` gets FileNotFoundError.
 
     ANTHROPIC_BASE_URL is deliberately left untouched here — see start_session.
     """
@@ -380,7 +381,7 @@ def start_session(
     2.1.x, `claude remote-control` refuses to start ("Remote Control is only
     available when using Claude via api.anthropic.com.") unless the base URL is
     unset or its host is exactly api.anthropic.com. So the session inherits the
-    service env (see _spawn_env, which only widens PATH) and talks to Anthropic
+    service env (see local_bin_env, which only widens PATH) and talks to Anthropic
     directly — the usage-stats proxy only sits in front of the non-interactive
     `claude -p` calls.
     """
@@ -410,7 +411,7 @@ def start_session(
     proc = subprocess.Popen(
         cmd,
         cwd=project_path,
-        env=_spawn_env(),
+        env=local_bin_env(),
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,

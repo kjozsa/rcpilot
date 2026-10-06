@@ -22,6 +22,8 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 
+from pilot.sessions import local_bin_env
+
 if TYPE_CHECKING:
     from pilot.config import Config
 
@@ -154,13 +156,13 @@ def _ticker_loop(config: "Config", stop_event: threading.Event) -> None:
 
 
 def _fire(config: "Config", now: datetime) -> None:
-    import os
     label = now.strftime("%H:%M")
     logger.info("ticker: firing cron job at {}", label)
     ok = False
     detail = ""
     try:
-        env = os.environ.copy()
+        # The service PATH lacks ~/.local/bin, where claude lives.
+        env = local_bin_env()
         env["ANTHROPIC_BASE_URL"] = f"http://127.0.0.1:{config.port}/proxy"
         result = subprocess.run(
             ["claude", "-p", "hi"],

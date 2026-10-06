@@ -426,7 +426,7 @@ wheels = [
 
 [[package]]
 name = "rcpilot"
-version = "1.10.4"
+version = "1.10.5"
 source = { editable = "." }
 dependencies = [
     { name = "aiosqlite" },

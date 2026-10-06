@@ -265,12 +265,7 @@ def _subprocess_env() -> dict:
     there by npm/pip for the pi user) is reachable even when the systemd
     service starts with a stripped PATH.
     """
-    import os
-    env = os.environ.copy()
-    local_bin = str(Path.home() / ".local" / "bin")
-    path = env.get("PATH", "")
-    if local_bin not in path.split(":"):
-        env["PATH"] = f"{local_bin}:{path}"
+    env = session_mgr.local_bin_env()
     env["ANTHROPIC_BASE_URL"] = _proxy_url()
     return env
 
